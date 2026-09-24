@@ -7,8 +7,7 @@ import AuthModal from './components/AuthModal';
 import InteractiveSeatMap from './components/InteractiveSeatMap';
 import TicketPass from './components/TicketPass';
 import { formatIDR, formatDateID } from './utils';
-
-const API_BASE = import.meta.env.VITE_API_URL || '';
+import { getSpots, getSchedules, createBooking, lookupBookings, cancelBooking } from './api';
 
 export default function App() {
   // Authentication state
@@ -48,11 +47,8 @@ export default function App() {
 
   // 1. Fetch pooling spots on load
   useEffect(() => {
-    fetch(`${API_BASE}/api/spots`)
-      .then((res) => res.json())
-      .then((data) => {
-        setSpots(data);
-      })
+    getSpots()
+      .then((data) => setSpots(Array.isArray(data) ? data : []))
       .catch((err) => console.error('Failed to load pooling spots:', err));
   }, []);
 
@@ -68,8 +64,7 @@ export default function App() {
     setHasSearched(true);
 
     try {
-      const res = await fetch(`${API_BASE}/api/schedules?origin=${originSpotId}&destination=${destSpotId}&date=${travelDate}`);
-      const data = await res.json();
+      const data = await getSchedules(originSpotId, destSpotId, travelDate);
       setSchedules(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error fetching schedules:', err);
@@ -118,38 +113,25 @@ export default function App() {
     setBookingError('');
 
     try {
-      const res = await fetch(`${API_BASE}/api/bookings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          schedule_id: selectedSchedule.id,
-          travel_date: travelDate,
-          customer_name: currentUser.name,
-          customer_phone: currentUser.phone || '',
-          customer_email: currentUser.email || '',
-          auth_method: currentUser.method || 'phone',
-          seat_numbers: selectedSeats
-        })
+      const newTicket = await createBooking({
+        schedule_id: selectedSchedule.id,
+        travel_date: travelDate,
+        customer_name: currentUser.name,
+        customer_phone: currentUser.phone || '',
+        customer_email: currentUser.email || '',
+        auth_method: currentUser.method || 'phone',
+        seat_numbers: selectedSeats
       });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setBookingError(data.error || 'Terjadi kesalahan saat memesan tiket.');
-        // Refresh schedules to update seat availability
-        handleSearch();
-        return;
-      }
-
       // Success! Open digital ticket
-      setActiveTicket(data);
+      setActiveTicket(newTicket);
       // Reset selections
       setSelectedSeats([]);
       // Refresh schedules
       handleSearch();
     } catch (err) {
       console.error(err);
-      setBookingError('Gagal terhubung ke server. Silakan coba lagi.');
+      setBookingError(err.message || 'Gagal memproses pemesanan tiket.');
     } finally {
       setBookingLoading(false);
     }
@@ -159,9 +141,7 @@ export default function App() {
   const loadMyBookings = async () => {
     if (!currentUser) return;
     try {
-      const param = currentUser.phone ? `phone=${encodeURIComponent(currentUser.phone)}` : `code=`;
-      const res = await fetch(`${API_BASE}/api/bookings/lookup?${param}`);
-      const data = await res.json();
+      const data = await lookupBookings({ phone: currentUser.phone, code: '' });
       setMyBookings(Array.isArray(data) ? data : (data ? [data] : []));
       setShowMyBookings(true);
     } catch (err) {
@@ -175,16 +155,7 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/api/bookings/${bookingId}/cancel`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: currentUser?.phone })
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.error || 'Gagal membatalkan tiket');
-        return;
-      }
+      await cancelBooking(bookingId, currentUser?.phone);
       
       // Update local myBookings state
       setMyBookings((prev) =>
@@ -201,7 +172,7 @@ export default function App() {
       alert('Pesanan tiket berhasil dibatalkan.');
     } catch (err) {
       console.error('Failed to cancel booking:', err);
-      alert('Gagal terhubung ke server');
+      alert(err.message || 'Gagal terhubung ke server');
     }
   };
 

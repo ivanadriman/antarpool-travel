@@ -1,116 +1,88 @@
-# 🌐 Step-by-Step Online Deployment Guide (100% Free - NO Credit Card)
+# 🌐 Supabase + Vercel/Netlify Deployment Guide (100% Free - NO Credit Card)
 
-Welcome! This guide walks you through deploying your **AntarPool Travel & Rental** platform completely free of charge with **ZERO credit card required** using:
-1. **GitHub** (source code repository)
-2. **Zeabur** (backend API + real-time WebSocket server — **No Credit Card Required**)
-3. **Netlify** (Client Passenger App + Business Operator Dashboard — **No Credit Card Required**)
+Welcome! With our new cloud architecture, **there is NO backend server to host**!
+- **Database + Real-time WebSockets**: Handled by **Supabase** (Free cloud PostgreSQL + instant Realtime).
+- **Web Applications**: Both the **Client App (Passenger)** and **Business App (Operator)** deploy directly to **Vercel** or **Netlify** in 1 click.
 
----
-
-## 📋 Overview of What Will Be Live
-
-| Component | Hosted On | URL Example |
-|---|---|---|
-| **Backend API + WebSocket** | Zeabur | `https://antarpool-api.zeabur.app` |
-| **Client App (Passenger)** | Netlify | `https://antarpool-travel.netlify.app` |
-| **Business App (Operator)** | Netlify | `https://antarpool-operator.netlify.app` |
+Everything is **100% Free** with **ZERO Credit Card Required**.
 
 ---
 
-## 🔒 Business App Security (Already Active)
-The Business App is already protected by an **Operator Login Gate**:
-- **Default Username:** `admin`
-- **Default Password:** `antarpool2026`
-*(Customizable via Netlify Environment Variables `VITE_OPERATOR_USER` and `VITE_OPERATOR_PASS`)*
+## 📋 Architecture Overview
+
+```mermaid
+flowchart LR
+    Client["Client App (Passenger)\nVercel / Netlify"] -->|Live DB Queries & Bookings| Supabase[("Supabase Free Cloud\nPostgreSQL + Realtime")]
+    Business["Business App (Operator)\nVercel / Netlify"] -->|Sub-second Voice Realtime| Supabase
+```
 
 ---
 
-## 🚀 STEP 1: Commit and Push Your Project to GitHub
+## 🚀 STEP 1: Set Up Free Supabase Database (2 Minutes)
 
-1. Open your browser and go to [github.com](https://github.com).
-2. Create a new repository:
-   - Name: `antarpool-travel` (or any name)
-   - Visibility: **Public** or **Private** (both work)
-   - Do **NOT** check "Add a README file"
-   - Click **Create repository**.
-3. In your project root folder (`Car - Travel and Rental`), run:
-   ```bash
-   git init
-   git add .
-   git commit -m "feat: complete antarpool travel platform with auth and zeabur deployment"
-   git branch -M main
-   git remote add origin https://github.com/YOUR_GITHUB_USERNAME/antarpool-travel.git
-   git push -u origin main
-   ```
-   *(Replace with your actual GitHub username and repository link)*
+1. Open [**supabase.com**](https://supabase.com) and click **Start your project** (Sign in with **GitHub** — **No credit card**).
+2. Click **New Project**:
+   - **Name:** `antarpool-travel`
+   - **Database Password:** Enter any strong password (or click generate).
+   - **Region:** Choose Singapore (`Southeast Asia (Singapore)`) for fastest speeds in Indonesia.
+   - Click **Create new project** and wait ~1 minute for it to finish provisioning.
+3. Open the **SQL Editor** on the left menu (icon: `>_`).
+4. Click **New query** (or open empty editor).
+5. Open [`deploy/supabase_schema.sql`](./supabase_schema.sql) in this project, copy the entire content, paste it into the Supabase SQL Editor, and click **Run** (or `Ctrl + Enter`).
+   > 🎉 *This instantly creates all 5 tables (`pooling_spots`, `armadas`, `schedules`, `bookings`, `order_timeline_events`), enables Realtime replication, and seeds Surabaya & Malang routes!*
+6. Go to **Project Settings** (gear icon on bottom left) → **API**:
+   - Copy **Project URL** (e.g. `https://xyzcompany.supabase.co`).
+   - Copy **anon public API Key** (starts with `eyJhbGci...`).
 
 ---
 
-## 🖥️ STEP 2: Deploy Backend to Zeabur (NO Credit Card)
+## 💻 STEP 2: Commit & Push Code to GitHub
 
-1. Open [zeabur.com](https://zeabur.com) and click **Login** → select **Continue with GitHub**.
-2. Click **Create Project** (select a region close to Indonesia, like Singapore / Asia).
-3. Click **Deploy New Service** → select **GitHub**.
-4. Choose your repository: `antarpool-travel`.
-5. Under configuration:
-   - Select directory: `server`
-   - Zeabur will automatically detect **Node.js** and start deploying.
-6. Once deployed, click on your service card → go to **Networking** (or **Domains**).
-7. Click **Generate Domain** to get a free public domain (e.g. `antarpool-api.zeabur.app`).
-8. Copy your full backend URL:
-   > 📌 *Example URL:* `https://antarpool-api.zeabur.app`
+Open your terminal in `Car - Travel and Rental`:
+```bash
+git add .
+git commit -m "feat: migrate to Supabase cloud database and realtime engine"
+git push
+```
 
 ---
 
-## 📱 STEP 3: Deploy Client App (Passenger) to Netlify
+## 📱 STEP 3: Deploy Client App (Passenger) to Vercel or Netlify
 
-1. Go to [netlify.com](https://netlify.com) and sign in with GitHub (No card needed).
-2. Click **Add new site** → select **Import an existing project**.
-3. Select **GitHub** → choose your `antarpool-travel` repository.
-4. Set Build Settings:
-   - **Base directory:** `client`
-   - **Build command:** `npm run build`
-   - **Publish directory:** `client/dist`
-5. **Add Environment Variable:**
-   - Click **Add environment variables**:
-     - Key: `VITE_API_URL`
-     - Value: `https://antarpool-api.zeabur.app` *(paste your Zeabur URL from Step 2, NO trailing slash)*
-6. Click **Deploy antarpool-travel**.
-7. Netlify gives you a live link (e.g. `https://antarpool-travel.netlify.app`).
+### Using Vercel (Recommended):
+1. Go to [**vercel.com**](https://vercel.com) and log in with GitHub.
+2. Click **Add New...** → **Project**.
+3. Select your `antarpool-travel` repository.
+4. Configure Project:
+   - **Project Name:** `antarpool-travel`
+   - **Root Directory:** Click edit and select `client`
+5. Under **Environment Variables**, add:
+   - `VITE_SUPABASE_URL` = *(Your Supabase Project URL from Step 1)*
+   - `VITE_SUPABASE_ANON_KEY` = *(Your Supabase anon public key from Step 1)*
+6. Click **Deploy**! In 30 seconds your passenger app is live worldwide!
 
 ---
 
-## 🏢 STEP 4: Deploy Business App (Operator) to Netlify
+## 🏢 STEP 4: Deploy Business App (Operator) to Vercel or Netlify
 
-1. In Netlify, click **Add new site** → **Import an existing project** again.
-2. Select **GitHub** → choose the same `antarpool-travel` repository.
-3. Set Build Settings:
-   - **Base directory:** `business`
-   - **Build command:** `npm run build`
-   - **Publish directory:** `business/dist`
-4. **Add Environment Variables:**
-   - Key: `VITE_API_URL` | Value: `https://antarpool-api.zeabur.app` *(your Zeabur URL)*
-   - *(Optional)* Key: `VITE_OPERATOR_USER` | Value: `admin`
-   - *(Optional)* Key: `VITE_OPERATOR_PASS` | Value: `antarpool2026`
-5. Click **Deploy antarpool-operator**.
-6. Netlify gives you your live operator link (e.g. `https://antarpool-operator.netlify.app`).
-
----
-
-## 🔗 STEP 5: Add Frontend URLs to Zeabur Environment (CORS)
-
-1. Return to your [Zeabur Dashboard](https://dash.zeabur.com).
-2. Click your project → click your `server` service card → go to **Variables** (or **Environment**).
-3. Add:
-   - `CLIENT_URL` = `https://antarpool-travel.netlify.app` *(your Client Netlify URL)*
-   - `BUSINESS_URL` = `https://antarpool-operator.netlify.app` *(your Business Netlify URL)*
-4. Zeabur will automatically reload in a few seconds.
+1. In Vercel, click **Add New...** → **Project** again.
+2. Select the same `antarpool-travel` repository.
+3. Configure Project:
+   - **Project Name:** `antarpool-operator`
+   - **Root Directory:** Click edit and select `business`
+4. Under **Environment Variables**, add:
+   - `VITE_SUPABASE_URL` = *(Your Supabase Project URL)*
+   - `VITE_SUPABASE_ANON_KEY` = *(Your Supabase anon public key)*
+   - *(Optional)* `VITE_OPERATOR_USER` = `admin`
+   - *(Optional)* `VITE_OPERATOR_PASS` = `antarpool2026`
+5. Click **Deploy**! Your operator dashboard is live!
 
 ---
 
 ## ✅ Live Verification Checklist
 
-- [ ] **Client App:** Open the client Netlify link on your phone/PC. Routes (Pool Surabaya, Pool Malang) and departure times should load.
-- [ ] **Booking Flow:** Pick a seat and book. The boarding pass with your booking code should appear.
-- [ ] **Business App Security:** Open the operator Netlify link. The Login Gate appears. Log in with `admin` / `antarpool2026`.
-- [ ] **Live Voice Notification:** Place a new booking from the passenger app. The operator dashboard chimes and speaks the announcement in real time!
+- [ ] **Operator Security:** Open the Business App. Verify the Login Gate appears. Log in with `admin` / `antarpool2026`.
+- [ ] **Realtime Indicator:** Look at the top bar; it will show **"Live WebSocket Aktif"** connected via Supabase Realtime!
+- [ ] **Book a Ticket:** Open the Client App on your phone, choose seats, and book.
+- [ ] **Instant Voice Announcer:** The operator dashboard immediately chimes and speaks the Indonesian voice announcement in sub-second real time!
+- [ ] **Supabase Dashboard:** Open Supabase → Table Editor → `bookings`. You can see every booking row live!

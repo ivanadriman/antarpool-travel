@@ -11,6 +11,12 @@ import OrderTimeline from './components/OrderTimeline';
 import LoginGate from './components/LoginGate';
 import { playChime, speakIndonesian } from './voiceNotifier';
 import { formatIDR, formatDateID } from './utils';
+import { supabase, isSupabaseConfigured } from './supabase';
+import { 
+  getBusinessBookings, getArmadas, getSpots, getBusinessSchedules,
+  updateBookingStatus, saveSchedule, deleteSchedule, saveArmada,
+  deleteArmada, getTimeline, getAnalytics 
+} from './api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
 
@@ -97,10 +103,117 @@ export default function App() {
     scheduleFilterDateRef.current = scheduleFilterDate;
   }, [scheduleFilterDate]);
 
-  // 1. WebSocket connection for real-time voice & order notifications
+  // 1. Real-time voice & order notifications (Supports both Supabase Realtime & WebSocket fallback)
   useEffect(() => {
     if (!operatorUser) return;
 
+    let isMounted = true;
+
+    // Check if Supabase Realtime is configured
+    if (isSupabaseConfigured && supabase) {
+      console.log('Connecting to Supabase Realtime channel...');
+      const channel = supabase
+        .channel('business_orders_realtime')
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'bookings' },
+          async (payload) => {
+            if (!isMounted) return;
+            const newOrder = payload.new;
+
+            // Fetch enriched schedule names for accurate voice announcement
+            let originName = 'Pool Keberangkatan';
+            let destName = 'Pool Tujuan';
+            let depTime = 'Keberangkatan';
+
+            try {
+              const { data: sch } = await supabase
+                .from('schedules')
+                .select('departure_time, origin:pooling_spots!origin_spot_id(name), destination:pooling_spots!destination_spot_id(name)')
+                .eq('id', newOrder.schedule_id)
+                .single();
+              if (sch) {
+                originName = sch.origin?.name || originName;
+                destName = sch.destination?.name || destName;
+                depTime = sch.departure_time || depTime;
+              }
+            } catch (e) {}
+
+            const enrichedOrder = {
+              ...newOrder,
+              origin_name: originName,
+              destination_name: destName,
+              departure_time: depTime
+            };
+
+            setBookings((prev) => {
+              if (prev.some((b) => b.id === newOrder.id || b.booking_code === newOrder.booking_code)) return prev;
+              return [enrichedOrder, ...prev];
+            });
+
+            setNewOrderIds((prev) => new Set(prev).add(newOrder.id));
+
+            const voiceText = `Pesanan baru dari ${originName} ke ${destName}. Pemesan ${newOrder.customer_name}, ${newOrder.seats_count} kursi, keberangkatan pukul ${depTime}.`;
+            if (voiceEnabledRef.current) speakIndonesian(voiceText);
+
+            setLatestVoiceToast({
+              text: voiceText,
+              customer: newOrder.customer_name,
+              route: `${originName} → ${destName}`,
+              seats: newOrder.seats_count,
+              time: depTime
+            });
+
+            setTimeout(() => {
+              if (isMounted) setLatestVoiceToast((curr) => (curr?.customer === newOrder.customer_name ? null : curr));
+            }, 8000);
+
+            fetchSchedulesAndSpots(scheduleFilterDateRef.current);
+            fetchAnalytics();
+            fetchTimeline();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'bookings' },
+          (payload) => {
+            if (!isMounted) return;
+            const updated = payload.new;
+
+            setBookings((prev) => prev.map((b) => (b.id === updated.id ? { ...b, ...updated } : b)));
+
+            if (updated.booking_status === 'CANCELLED' || updated.payment_status === 'CANCELLED') {
+              const cancelVoice = `Perhatian: Pesanan ${updated.booking_code} atas nama ${updated.customer_name} telah dibatalkan.`;
+              if (voiceEnabledRef.current) speakIndonesian(cancelVoice, true);
+              setLatestVoiceToast({
+                isCancelled: true,
+                text: cancelVoice,
+                customer: updated.customer_name,
+                seats: updated.seats_count
+              });
+              setTimeout(() => {
+                if (isMounted) setLatestVoiceToast((curr) => (curr?.customer === updated.customer_name ? null : curr));
+              }, 8000);
+            }
+
+            fetchSchedulesAndSpots(scheduleFilterDateRef.current);
+            fetchAnalytics();
+            fetchTimeline();
+          }
+        )
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            setWsConnected(true);
+          }
+        });
+
+      return () => {
+        isMounted = false;
+        supabase.removeChannel(channel);
+      };
+    }
+
+    // Fallback: Connect to standard WebSocket server if no Supabase configured
     let wsUrl;
     if (API_BASE) {
       const wsProtocol = API_BASE.startsWith('https:') ? 'wss:' : 'ws:';
@@ -113,7 +226,6 @@ export default function App() {
 
     let ws = null;
     let reconnectTimer = null;
-    let isMounted = true;
 
     function connectWs() {
       if (!isMounted) return;
@@ -122,7 +234,6 @@ export default function App() {
 
       ws.onopen = () => {
         if (!isMounted) return;
-        console.log('Connected to business notification server');
         setWsConnected(true);
       };
 
@@ -132,27 +243,12 @@ export default function App() {
           const data = JSON.parse(event.data);
           if (data.type === 'NEW_BOOKING') {
             const newOrder = data.booking;
-            // Prepend new order to list, avoiding duplicate entries by booking_code / id
             setBookings((prev) => {
-              if (prev.some((b) => b.id === newOrder.id || b.booking_code === newOrder.booking_code)) {
-                return prev;
-              }
+              if (prev.some((b) => b.id === newOrder.id || b.booking_code === newOrder.booking_code)) return prev;
               return [newOrder, ...prev];
             });
-
-            // Mark this order as new / unread for highlight & badge
-            setNewOrderIds((prev) => {
-              const updated = new Set(prev);
-              updated.add(newOrder.id);
-              return updated;
-            });
-
-            // Trigger Voice Notification in Indonesian if voice enabled
-            if (voiceEnabledRef.current) {
-              speakIndonesian(data.voiceText);
-            }
-
-            // Show toast
+            setNewOrderIds((prev) => new Set(prev).add(newOrder.id));
+            if (voiceEnabledRef.current) speakIndonesian(data.voiceText);
             setLatestVoiceToast({
               text: data.voiceText,
               customer: newOrder.customer_name,
@@ -160,73 +256,43 @@ export default function App() {
               seats: newOrder.seats_count,
               time: newOrder.departure_time
             });
-
-            // Auto dismiss toast after 8 seconds
             setTimeout(() => {
-              if (isMounted) {
-                setLatestVoiceToast((curr) => (curr?.customer === newOrder.customer_name ? null : curr));
-              }
+              if (isMounted) setLatestVoiceToast((curr) => (curr?.customer === newOrder.customer_name ? null : curr));
             }, 8000);
-
-            // Auto-refresh schedules (live seat count left), analytics, and timeline in real time
             fetchSchedulesAndSpots(scheduleFilterDateRef.current);
             fetchAnalytics();
             fetchTimeline();
           } else if (data.type === 'BOOKING_CANCELLED') {
             const cancelledOrder = data.booking;
-            // Update order status in local bookings state
-            setBookings((prev) =>
-              prev.map((b) => (b.id === cancelledOrder.id ? { ...b, ...cancelledOrder } : b))
-            );
-
-            // Trigger Voice Notification in Indonesian with warning tone if voice enabled
-            if (voiceEnabledRef.current && data.voiceText) {
-              speakIndonesian(data.voiceText, true);
-            }
-
-            // Show cancellation alert toast banner
+            setBookings((prev) => prev.map((b) => (b.id === cancelledOrder.id ? { ...b, ...cancelledOrder } : b)));
+            if (voiceEnabledRef.current && data.voiceText) speakIndonesian(data.voiceText, true);
             setLatestVoiceToast({
               isCancelled: true,
               text: data.voiceText || `Pesanan ${cancelledOrder.booking_code} telah dibatalkan.`,
-              customer: cancelledOrder.customer_name,
-              route: `${cancelledOrder.origin_name} → ${cancelledOrder.destination_name}`,
-              seats: cancelledOrder.seats_count,
-              time: cancelledOrder.departure_time
+              customer: cancelledOrder.customer_name
             });
-
-            // Auto dismiss toast after 8 seconds
             setTimeout(() => {
-              if (isMounted) {
-                setLatestVoiceToast((curr) => (curr?.customer === cancelledOrder.customer_name ? null : curr));
-              }
+              if (isMounted) setLatestVoiceToast((curr) => (curr?.customer === cancelledOrder.customer_name ? null : curr));
             }, 8000);
-
-            // Refresh schedules (released seats), analytics, and timeline immediately
             fetchSchedulesAndSpots(scheduleFilterDateRef.current);
             fetchAnalytics();
             fetchTimeline();
           } else if (data.type === 'BOOKING_UPDATED') {
-            setBookings((prev) =>
-              prev.map((b) => (b.id === data.booking.id ? { ...b, ...data.booking } : b))
-            );
+            setBookings((prev) => prev.map((b) => (b.id === data.booking.id ? { ...b, ...data.booking } : b)));
             fetchSchedulesAndSpots(scheduleFilterDateRef.current);
             fetchAnalytics();
             fetchTimeline();
           }
-        } catch (err) {
-          console.error('Error handling ws message:', err);
-        }
+        } catch (err) {}
       };
 
       ws.onclose = () => {
         if (!isMounted) return;
         setWsConnected(false);
-        // Only reconnect if still mounted
         reconnectTimer = setTimeout(connectWs, 3000);
       };
 
-      ws.onerror = (err) => {
-        console.error('WebSocket error:', err);
+      ws.onerror = () => {
         if (ws) ws.close();
       };
     }
@@ -247,12 +313,11 @@ export default function App() {
   const fetchBookings = async () => {
     setLoadingBookings(true);
     try {
-      let url = `${API_BASE}/api/business/bookings?`;
-      if (orderFilterDate) url += `date=${orderFilterDate}&`;
-      if (orderFilterStatus) url += `payment_status=${orderFilterStatus}&`;
-      if (orderFilterBookingStatus) url += `status=${orderFilterBookingStatus}&`;
-      const res = await fetch(url);
-      const data = await res.json();
+      const data = await getBusinessBookings({
+        date: orderFilterDate,
+        status: orderFilterBookingStatus,
+        payment_status: orderFilterStatus
+      });
       setBookings(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error(err);
@@ -264,8 +329,7 @@ export default function App() {
   const fetchArmadas = async () => {
     setLoadingArmadas(true);
     try {
-      const res = await fetch(`${API_BASE}/api/armadas`);
-      const data = await res.json();
+      const data = await getArmadas();
       setArmadas(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error fetching armadas:', err);
@@ -278,15 +342,10 @@ export default function App() {
     setLoadingSchedules(true);
     try {
       const dateParam = customDate || scheduleFilterDate || new Date().toISOString().split('T')[0];
-      const [schRes, spotsRes, armadasRes] = await Promise.all([
-        fetch(`${API_BASE}/api/business/schedules?date=${dateParam}`),
-        fetch(`${API_BASE}/api/spots`),
-        fetch(`${API_BASE}/api/armadas`)
-      ]);
       const [schData, spotsData, armadasData] = await Promise.all([
-        schRes.json(), 
-        spotsRes.json(),
-        armadasRes.json()
+        getBusinessSchedules(dateParam),
+        getSpots(),
+        getArmadas()
       ]);
       setSchedules(Array.isArray(schData) ? schData : []);
       setSpots(Array.isArray(spotsData) ? spotsData : []);
@@ -301,8 +360,7 @@ export default function App() {
   const fetchAnalytics = async () => {
     setLoadingAnalytics(true);
     try {
-      const res = await fetch(`${API_BASE}/api/business/analytics`);
-      const data = await res.json();
+      const data = await getAnalytics();
       setAnalytics(data);
     } catch (err) {
       console.error(err);
@@ -314,8 +372,7 @@ export default function App() {
   const fetchTimeline = async () => {
     setLoadingTimeline(true);
     try {
-      const res = await fetch(`${API_BASE}/api/business/timeline`);
-      const data = await res.json();
+      const data = await getTimeline();
       setTimelineEvents(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error fetching timeline:', err);
@@ -336,17 +393,11 @@ export default function App() {
   // 3. Update booking status (e.g. Mark as PAID on arrival, or CANCELLED)
   const handleUpdateStatus = async (bookingId, paymentStatus, bookingStatus) => {
     try {
-      const res = await fetch(`${API_BASE}/api/business/bookings/${bookingId}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment_status: paymentStatus, booking_status: bookingStatus })
-      });
-      if (res.ok) {
-        fetchBookings();
-        fetchSchedulesAndSpots();
-        fetchAnalytics();
-        fetchTimeline();
-      }
+      await updateBookingStatus(bookingId, paymentStatus, bookingStatus);
+      fetchBookings();
+      fetchSchedulesAndSpots();
+      fetchAnalytics();
+      fetchTimeline();
     } catch (err) {
       console.error('Failed to update status:', err);
     }
@@ -366,66 +417,31 @@ export default function App() {
   // 4. Save schedule (Add or Edit)
   const handleSaveSchedule = async (schData) => {
     try {
-      let res;
-      if (schData.id) {
-        // Edit
-        res = await fetch(`${API_BASE}/api/business/schedules/${schData.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(schData)
-        });
-      } else {
-        // Create
-        res = await fetch(`${API_BASE}/api/business/schedules`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(schData)
-        });
+      const res = await saveSchedule(schData);
+      if (res && res.success === false) {
+        return { success: false, error: res.error || 'Gagal menyimpan jadwal' };
       }
-
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Gagal menyimpan jadwal' };
-      }
-
       await fetchSchedulesAndSpots();
       return { success: true };
     } catch (err) {
       console.error('Failed to save schedule:', err);
-      return { success: false, error: 'Gagal terhubung ke server' };
+      return { success: false, error: 'Gagal terhubung ke database' };
     }
   };
 
   // 5. Save Armada (Create or Edit)
   const handleSaveArmada = async (armadaData) => {
     try {
-      let res;
-      if (armadaData.id) {
-        // Edit existing armada
-        res = await fetch(`${API_BASE}/api/armadas/${armadaData.id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(armadaData)
-        });
-      } else {
-        // Create new armada
-        res = await fetch(`${API_BASE}/api/armadas`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(armadaData)
-        });
-      }
-
-      const data = await res.json();
-      if (!res.ok) {
-        return { success: false, error: data.error || 'Gagal menyimpan armada' };
+      const res = await saveArmada(armadaData);
+      if (res && res.success === false) {
+        return { success: false, error: res.error || 'Gagal menyimpan armada' };
       }
       await fetchArmadas();
-      await fetchSchedulesAndSpots(); // Refresh schedules in case capacity/name changed
+      await fetchSchedulesAndSpots();
       return { success: true };
     } catch (err) {
       console.error('Failed to save armada:', err);
-      return { success: false, error: 'Gagal terhubung ke server' };
+      return { success: false, error: 'Gagal terhubung ke database' };
     }
   };
 
@@ -435,20 +451,13 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/api/armadas/${armadaId}`, {
-        method: 'DELETE'
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        showAlert(data.error || 'Gagal menghapus armada.', 'error', 'Gagal Hapus Armada');
-        return;
-      }
+      await deleteArmada(armadaId);
       showAlert('Armada berhasil dihapus dari sistem.', 'success', 'Armada Dihapus');
       await fetchArmadas();
       await fetchSchedulesAndSpots();
     } catch (err) {
       console.error('Failed to delete armada:', err);
-      showAlert(`Gagal terhubung ke server: ${err.message}`, 'error', 'Koneksi Terputus');
+      showAlert(`Gagal menghapus armada: ${err.message}`, 'error', 'Koneksi Terputus');
     }
   };
 
@@ -458,20 +467,12 @@ export default function App() {
       return;
     }
     try {
-      const res = await fetch(`${API_BASE}/api/business/schedules/${scheduleId}`, {
-        method: 'DELETE'
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        // Show detailed explanation modal/banner
-        showAlert(data.error || 'Gagal menghapus jadwal dari sistem.', 'error', 'Gagal Menghapus Jadwal');
-        return;
-      }
+      await deleteSchedule(scheduleId);
       showAlert('Jadwal keberangkatan berhasil dihapus.', 'success', 'Jadwal Dihapus');
       await fetchSchedulesAndSpots();
     } catch (err) {
       console.error('Failed to delete schedule:', err);
-      showAlert(`Gagal terhubung ke server: ${err.message}`, 'error', 'Koneksi Terputus');
+      showAlert(err.message || 'Gagal menghapus jadwal dari sistem.', 'error', 'Gagal Menghapus Jadwal');
     }
   };
 
