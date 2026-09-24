@@ -21,8 +21,8 @@ app.use(cors({
     if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
       return callback(null, true);
     }
-    // Allow Netlify preview and custom deploy domains
-    if (origin.endsWith('.netlify.app') || origin.endsWith('.onrender.com')) {
+    // Allow Netlify preview, Zeabur, Koyeb, and custom deploy domains
+    if (origin.endsWith('.netlify.app') || origin.endsWith('.zeabur.app') || origin.endsWith('.koyeb.app') || origin.endsWith('.onrender.com')) {
       return callback(null, true);
     }
     return callback(null, true); // Permissive fallback to prevent breaking deployments

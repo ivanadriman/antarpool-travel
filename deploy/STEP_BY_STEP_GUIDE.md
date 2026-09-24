@@ -1,9 +1,9 @@
-# 🌐 Step-by-Step Online Deployment Guide
+# 🌐 Step-by-Step Online Deployment Guide (100% Free - NO Credit Card)
 
-Welcome! This guide walks you through deploying your **AntarPool Travel & Rental** platform completely free of charge using:
+Welcome! This guide walks you through deploying your **AntarPool Travel & Rental** platform completely free of charge with **ZERO credit card required** using:
 1. **GitHub** (source code repository)
-2. **Render** (backend API + real-time WebSocket + persistent SQLite database)
-3. **Netlify** (Client Passenger App + Business Operator Dashboard)
+2. **Zeabur** (backend API + real-time WebSocket server — **No Credit Card Required**)
+3. **Netlify** (Client Passenger App + Business Operator Dashboard — **No Credit Card Required**)
 
 ---
 
@@ -11,120 +11,106 @@ Welcome! This guide walks you through deploying your **AntarPool Travel & Rental
 
 | Component | Hosted On | URL Example |
 |---|---|---|
-| **Backend API + WebSocket** | Render | `https://antarpool-api.onrender.com` |
+| **Backend API + WebSocket** | Zeabur | `https://antarpool-api.zeabur.app` |
 | **Client App (Passenger)** | Netlify | `https://antarpool-travel.netlify.app` |
 | **Business App (Operator)** | Netlify | `https://antarpool-operator.netlify.app` |
 
 ---
 
-## 🔒 Business App Security (Already Configured)
-Before anyone can view or manage bookings, schedules, armadas, or revenue in the Business App, they will see a **Login Gate**.
+## 🔒 Business App Security (Already Active)
+The Business App is already protected by an **Operator Login Gate**:
 - **Default Username:** `admin`
 - **Default Password:** `antarpool2026`
-*(You can customize these later in Netlify Environment Variables using `VITE_OPERATOR_USER` and `VITE_OPERATOR_PASS`)*
+*(Customizable via Netlify Environment Variables `VITE_OPERATOR_USER` and `VITE_OPERATOR_PASS`)*
 
 ---
 
-## 🚀 STEP 1: Push Your Project to GitHub
+## 🚀 STEP 1: Commit and Push Your Project to GitHub
 
 1. Open your browser and go to [github.com](https://github.com).
-2. Click **New Repository**:
-   - Repository name: `antarpool-travel` (or any name you prefer)
-   - Visibility: **Public** or **Private** (both work with Render & Netlify free tiers)
-   - Do **NOT** check "Add a README file" (we already have our project ready).
+2. Create a new repository:
+   - Name: `antarpool-travel` (or any name)
+   - Visibility: **Public** or **Private** (both work)
+   - Do **NOT** check "Add a README file"
    - Click **Create repository**.
-3. Open a terminal or PowerShell in your project folder (`Car - Travel and Rental`) and run:
+3. In your project root folder (`Car - Travel and Rental`), run:
    ```bash
    git init
    git add .
-   git commit -m "feat: complete antarpool travel platform with auth and deployment readiness"
+   git commit -m "feat: complete antarpool travel platform with auth and zeabur deployment"
    git branch -M main
    git remote add origin https://github.com/YOUR_GITHUB_USERNAME/antarpool-travel.git
    git push -u origin main
    ```
-   *(Replace `YOUR_GITHUB_USERNAME` and repo name with yours)*
+   *(Replace with your actual GitHub username and repository link)*
 
 ---
 
-## 🖥️ STEP 2: Deploy Backend to Render (with Persistent Disk)
+## 🖥️ STEP 2: Deploy Backend to Zeabur (NO Credit Card)
 
-1. Sign up or log in to [render.com](https://render.com) using your GitHub account.
-2. In your Render Dashboard, click **New +** → select **Web Service**.
-3. Choose **Build and deploy from a Git repository** → select your `antarpool-travel` repository.
-4. Fill in the service configuration:
-   - **Name:** `antarpool-api` (or any unique name)
-   - **Region:** Choose Singapore (`Southeast Asia`) for fastest response in Indonesia.
-   - **Root Directory:** `server`
-   - **Environment:** `Node`
-   - **Build Command:** `npm install`
-   - **Start Command:** `npm start`
-   - **Plan Type:** **Free**
-5. **Attach Persistent Storage (CRITICAL for SQLite Database):**
-   - Scroll down to **Disks** → click **Add Disk**.
-   - Name: `travel-db-storage`
-   - Mount Path: `/data`
-   - Size: `1 GB` (Free)
-6. **Set Environment Variables:**
-   - Scroll to **Environment Variables** → click **Add Environment Variable**:
-     - Key: `DATABASE_PATH` | Value: `/data/travel.db`
-7. Click **Create Web Service**.
-8. Wait 1–2 minutes for the build to finish. Once it says **Live**, copy your Render URL at the top:
-   > 📌 *Example Render URL:* `https://antarpool-api.onrender.com`
+1. Open [zeabur.com](https://zeabur.com) and click **Login** → select **Continue with GitHub**.
+2. Click **Create Project** (select a region close to Indonesia, like Singapore / Asia).
+3. Click **Deploy New Service** → select **GitHub**.
+4. Choose your repository: `antarpool-travel`.
+5. Under configuration:
+   - Select directory: `server`
+   - Zeabur will automatically detect **Node.js** and start deploying.
+6. Once deployed, click on your service card → go to **Networking** (or **Domains**).
+7. Click **Generate Domain** to get a free public domain (e.g. `antarpool-api.zeabur.app`).
+8. Copy your full backend URL:
+   > 📌 *Example URL:* `https://antarpool-api.zeabur.app`
 
 ---
 
 ## 📱 STEP 3: Deploy Client App (Passenger) to Netlify
 
-1. Sign up or log in to [netlify.com](https://netlify.com) using your GitHub account.
-2. In the Netlify Dashboard, click **Add new site** → select **Import an existing project**.
-3. Choose **GitHub** and select your `antarpool-travel` repository.
-4. Configure Build settings:
-   - **Site name:** e.g. `antarpool-travel`
+1. Go to [netlify.com](https://netlify.com) and sign in with GitHub (No card needed).
+2. Click **Add new site** → select **Import an existing project**.
+3. Select **GitHub** → choose your `antarpool-travel` repository.
+4. Set Build Settings:
    - **Base directory:** `client`
    - **Build command:** `npm run build`
    - **Publish directory:** `client/dist`
 5. **Add Environment Variable:**
-   - Click **Add environment variables** (or go to Site configuration → Environment variables):
+   - Click **Add environment variables**:
      - Key: `VITE_API_URL`
-     - Value: `https://antarpool-api.onrender.com` *(paste your Render URL from Step 2, no trailing slash)*
+     - Value: `https://antarpool-api.zeabur.app` *(paste your Zeabur URL from Step 2, NO trailing slash)*
 6. Click **Deploy antarpool-travel**.
-7. Once deployed, Netlify will give you a public URL (e.g. `https://antarpool-travel.netlify.app`).
+7. Netlify gives you a live link (e.g. `https://antarpool-travel.netlify.app`).
 
 ---
 
 ## 🏢 STEP 4: Deploy Business App (Operator) to Netlify
 
-1. In your Netlify Dashboard, click **Add new site** → **Import an existing project** again.
-2. Choose **GitHub** and pick the **same repository** (`antarpool-travel`).
-3. Configure Build settings for the Business App:
-   - **Site name:** e.g. `antarpool-operator`
+1. In Netlify, click **Add new site** → **Import an existing project** again.
+2. Select **GitHub** → choose the same `antarpool-travel` repository.
+3. Set Build Settings:
    - **Base directory:** `business`
    - **Build command:** `npm run build`
    - **Publish directory:** `business/dist`
 4. **Add Environment Variables:**
-   - Key: `VITE_API_URL` | Value: `https://antarpool-api.onrender.com` *(your Render URL)*
-   - *(Optional)* Key: `VITE_OPERATOR_USER` | Value: `your_username`
-   - *(Optional)* Key: `VITE_OPERATOR_PASS` | Value: `your_secure_password`
+   - Key: `VITE_API_URL` | Value: `https://antarpool-api.zeabur.app` *(your Zeabur URL)*
+   - *(Optional)* Key: `VITE_OPERATOR_USER` | Value: `admin`
+   - *(Optional)* Key: `VITE_OPERATOR_PASS` | Value: `antarpool2026`
 5. Click **Deploy antarpool-operator**.
-6. Netlify will generate your operator link (e.g. `https://antarpool-operator.netlify.app`).
+6. Netlify gives you your live operator link (e.g. `https://antarpool-operator.netlify.app`).
 
 ---
 
-## 🔗 STEP 5: Final Check & CORS Sync
+## 🔗 STEP 5: Add Frontend URLs to Zeabur Environment (CORS)
 
-1. Go back to your [Render Dashboard](https://dashboard.render.com).
-2. Open your `antarpool-api` service → go to **Environment Variables**.
-3. Add or update:
-   - `CLIENT_URL` = `https://antarpool-travel.netlify.app` *(your actual Client Netlify URL)*
-   - `BUSINESS_URL` = `https://antarpool-operator.netlify.app` *(your actual Business Netlify URL)*
-4. Click **Save Changes** (Render will auto-deploy the update).
+1. Return to your [Zeabur Dashboard](https://dash.zeabur.com).
+2. Click your project → click your `server` service card → go to **Variables** (or **Environment**).
+3. Add:
+   - `CLIENT_URL` = `https://antarpool-travel.netlify.app` *(your Client Netlify URL)*
+   - `BUSINESS_URL` = `https://antarpool-operator.netlify.app` *(your Business Netlify URL)*
+4. Zeabur will automatically reload in a few seconds.
 
 ---
 
 ## ✅ Live Verification Checklist
 
-- [ ] **Client App:** Open the client Netlify link on your phone/PC. The routes (Pool Surabaya, Pool Malang) and departure times should load.
-- [ ] **Seat Booking:** Select a seat and complete booking. A digital boarding pass with your booking code should appear.
-- [ ] **Business App Login:** Open the business Netlify link. You should see the **Operator Login Gate**. Try logging in with `admin` / `antarpool2026`.
-- [ ] **Live Notification:** When a new booking is placed on the client app, the business dashboard should chime and announce the order in real time.
-- [ ] **Database Persistence:** Restart the Render service. Your previous orders, seeded armadas, and schedules remain intact!
+- [ ] **Client App:** Open the client Netlify link on your phone/PC. Routes (Pool Surabaya, Pool Malang) and departure times should load.
+- [ ] **Booking Flow:** Pick a seat and book. The boarding pass with your booking code should appear.
+- [ ] **Business App Security:** Open the operator Netlify link. The Login Gate appears. Log in with `admin` / `antarpool2026`.
+- [ ] **Live Voice Notification:** Place a new booking from the passenger app. The operator dashboard chimes and speaks the announcement in real time!
