@@ -1,0 +1,15 @@
+# Ignore any local test or temporary files in the deploy directory
+*.tmp
+*.log
+*.bak
+
+# Ignore local environment files if created inside deploy
+.env
+.env.local
+*.env.local
+
+# But keep documentation, batch check script, and example templates
+!STEP_BY_STEP_GUIDE.md
+!check_ready.bat
+!env_templates/
+!env_templates/*.example

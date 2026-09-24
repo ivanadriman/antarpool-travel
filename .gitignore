@@ -1,0 +1,21 @@
+# Node dependencies
+node_modules/
+
+# Production build outputs
+dist/
+
+# SQLite databases & runtime locks
+server/travel.db
+*.db
+*.db-journal
+
+# Local Environment Variables
+.env
+.env.local
+.env.*.local
+
+# System & Editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
