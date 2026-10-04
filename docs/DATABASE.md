@@ -1,6 +1,6 @@
-# Database
+# Database Architecture
 
-Source of truth: [`deploy/supabase_schema.sql`](../deploy/supabase_schema.sql) (PostgreSQL). Legacy SQLite is defined in `server/src/db.js` with the same logical model (JSON stored as TEXT).
+The system uses a shared relational model implemented in PostgreSQL ([`deploy/supabase_schema.sql`](../deploy/supabase_schema.sql)) for the Demo target and SQLite (`server/travel.db` initialized via `server/src/db.js`) for the Production target.
 
 ```mermaid
 erDiagram
@@ -8,57 +8,91 @@ erDiagram
   armadas ||--o{ schedules : "armada_id (SET NULL)"
   schedules ||--o{ bookings : "schedule_id (CASCADE)"
   bookings ||--o{ order_timeline_events : "booking_id (CASCADE)"
+  bookings ||--o{ booking_seats : "booking_id (CASCADE)"
 ```
 
-## Tables
+## Tables & Schema
 
-### `pooling_spots`
-Terminals. `id`, `name`, `city`, `address`, `phone`, `landmark`, `is_active` (0/1), `created_at`.
+### 1. `pooling_spots`
+Physical transit terminals and hubs.
+- `id`: Primary key (Integer / Bigint)
+- `name`: Terminal name (e.g., `Pool Surabaya`, `Pool Malang`)
+- `city`: City location (`Surabaya`, `Malang`)
+- `address`, `phone`, `landmark`: Contact and guidance
+- `is_active`: `1` = active, `0` = disabled
 
-### `armadas`
-Vehicles with seat layout. `id`, `name`, `license_plate`, `rows_count`, `cols_count`, `layout_json` (JSONB, see below), `total_seats`, `is_active`, `created_at`.
+### 2. `armadas`
+Vehicles and their cabin grid seat layouts.
+- `id`: Primary key
+- `name`: Vehicle model (e.g. `Toyota HiAce Premio`, `Toyota Innova Reborn`)
+- `license_plate`: Vehicle registration plate (e.g. `L 7788 AB`)
+- `rows_count`, `cols_count`: Grid dimensions (e.g. 4 rows × 3 columns)
+- `layout_json`: 2D array of cell objects `[ { type: 'seat'|'aisle'|'empty'|'driver', label: '1A' } ]`
+- `total_seats`: Total passenger capacity count (`type === 'seat'`)
+- `is_active`: Status flag
 
-### `schedules`
-Recurring daily trip template. `id`, `origin_spot_id`, `destination_spot_id`, `departure_time` (`HH:MM` text), `price` (IDR int), `total_seats`, `armada_id`, `vehicle_model` (cached name), `vehicle_layout` (cached JSONB), `is_active`, `created_at`.
+### 3. `schedules`
+Recurring trip templates.
+- `id`: Primary key
+- `origin_spot_id`, `destination_spot_id`: Terminal references
+- `departure_time`: 24-hour time string (`HH:MM`)
+- `price`: Ticket price in integer IDR
+- `total_seats`: Seat capacity copied from the assigned armada
+- `armada_id`: Reference to assigned `armadas(id)`
+- `vehicle_model`, `vehicle_layout`: Cached model and seat layout
+- `is_active`: Toggle trip visibility
 
-### `bookings`
-| Column | Notes |
-|---|---|
-| `booking_code` | Unique, `TRV-yymmdd-XXXX` |
-| `schedule_id`, `travel_date` | Trip instance = schedule × date (`YYYY-MM-DD` text) |
-| `customer_name/phone/email`, `auth_method` | `phone` \| `email` \| `google` |
-| `seat_numbers` | JSONB array, e.g. `["2A","2B"]`; `seats_count`, `price_per_seat`, `total_price` |
-| `payment_method` | Always `Bayar di Tempat (Pool)` |
-| `payment_status` | `PENDING` → `PAID`; or `CANCELLED` |
-| `booking_status` | `CONFIRMED` → `COMPLETED` (checked in); or `CANCELLED` |
+### 4. `bookings`
+Passenger travel reservations.
+- `id`: Primary key
+- `booking_code`: Cryptographically random code (e.g., `TRV-261120-E3A1`)
+- `schedule_id`: Trip reference
+- `travel_date`: Date string `YYYY-MM-DD`
+- `customer_name`, `customer_phone`, `customer_email`, `auth_method`
+- `seat_numbers`: JSON array of booked seats (e.g. `["1A", "2B"]`)
+- `seats_count`: Count of seats
+- `price_per_seat`, `total_price`: Verified fare
+- `payment_method`: Defaults to `'Bayar di Tempat (Pool)'`
+- `payment_status`: `'PENDING'`, `'PAID'`, `'CANCELLED'`
+- `booking_status`: `'CONFIRMED'`, `'COMPLETED'`, `'CANCELLED'`
 
-### `order_timeline_events`
-Audit trail. `booking_id`, `booking_code`, `event_type` (`ORDER_PLACED`, `PAYMENT_RECEIVED`, `PASSENGER_CHECKED_IN`, `ORDER_CANCELLED`), `actor_role` (`CUSTOMER`/`OPERATOR`/`SYSTEM`), `description` (Indonesian), `details_json`, `created_at`.
+### 5. `booking_seats` (Atomic Reservation Table)
+Individual seat occupancy records that guarantee collision prevention.
+- `id`: Primary key
+- `booking_id`: Reference to parent `bookings(id)`
+- `schedule_id`: Trip reference
+- `travel_date`: Date string `YYYY-MM-DD`
+- `seat_number`: Assigned seat label (e.g., `'1A'`)
+- `status`: `'CONFIRMED'` or `'CANCELLED'`
 
-## Layout JSON
-```json
-[
-  [{"type":"driver","label":"Supir"},{"type":"empty","label":""},{"type":"seat","label":"1A"}],
-  [{"type":"seat","label":"2A"},{"type":"aisle","label":"Lorong"},{"type":"seat","label":"2B"}]
-]
+**Partial Unique Index:**
+```sql
+CREATE UNIQUE INDEX idx_unique_active_seat
+ON booking_seats(schedule_id, travel_date, seat_number)
+WHERE status != 'CANCELLED';
 ```
-`total_seats` must equal the number of `seat` cells (computed by `ArmadaModal`, not enforced by the DB).
+- **Guaranteed Uniqueness:** Two active bookings cannot hold the same seat on the same schedule and date.
+- **Instant Seat Release:** When an order is cancelled, `status` flips to `'CANCELLED'`. The partial index no longer includes that row, making the seat immediately available for another passenger without losing historical audit trails.
 
-## State machine
+### 6. `order_timeline_events`
+Audit trail recording life-cycle events.
+- `id`: Primary key
+- `booking_id`: Booking reference
+- `booking_code`: Human-readable identifier
+- `event_type`: `'ORDER_PLACED'`, `'PAYMENT_RECEIVED'`, `'PASSENGER_CHECKED_IN'`, `'ORDER_CANCELLED'`
+- `actor_role`: `'CUSTOMER'`, `'OPERATOR'`, `'SYSTEM'`
+- `description`: Localized event summary
+- `details_json`: Snapshot payload
+- `created_at`: Event timestamp
+
+## State Transitions
+
 ```
-PENDING/CONFIRMED --(operator: Terima Bayar)--> PAID/CONFIRMED
-PAID/CONFIRMED    --(operator: Check-in)------> PAID/COMPLETED
-any non-completed --(customer or operator)----> CANCELLED/CANCELLED   (seats released)
+[ORDER_PLACED]       PENDING / CONFIRMED
+       │
+       ├─► (Operator marks payment) ──► PAID / CONFIRMED
+       │                                     │
+       │                                     └─► (Check-in) ──► PAID / COMPLETED
+       │
+       └─► (Cancel by user/operator) ──► CANCELLED / CANCELLED  (Seat Released)
 ```
-Transitions are not validated by the DB (anything can be set to anything); the UI is the only guard.
-
-## Realtime & RLS
-- `bookings`, `schedules`, `order_timeline_events` are in the `supabase_realtime` publication. The operator app subscribes to `postgres_changes`.
-- RLS is enabled but every policy is `USING (true)` for all roles, including the anonymous key → effectively **no access control** ([SECURITY.md](SECURITY.md)).
-
-## Known schema gaps
-- No uniqueness guarantee on `(schedule_id, travel_date, seat)` → double-booking possible under concurrency.
-- No indexes beyond PK/`booking_code` (add on `bookings(schedule_id, travel_date)`, `bookings(customer_phone)`).
-- No CHECK constraints for statuses; `is_active` should be boolean; `travel_date` should be `DATE`.
-- No migrations folder; `schema.sql` is create-only.
-- Seed script inserts only HiAce armada schedules (Innova armada seeded but unused); schedule seat total is 8 while the seed label says "10 Seat".

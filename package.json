@@ -1,0 +1,20 @@
+{
+  "name": "antarpool-travel-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "client",
+    "business",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "lint": "npm run --prefix client lint && npm run --prefix business lint",
+    "build": "npm run --prefix client build && npm run --prefix business build",
+    "test": "node --test tests/contract.test.js",
+    "dev:client": "npm run --prefix client dev",
+    "dev:business": "npm run --prefix business dev",
+    "start:server": "npm run --prefix server start"
+  }
+}

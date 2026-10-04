@@ -1,43 +1,75 @@
-# Deployment
+# Deployment Guide
 
-Step-by-step with screenshots-level detail: [`deploy/STEP_BY_STEP_GUIDE.md`](../deploy/STEP_BY_STEP_GUIDE.md). This page is the checklist/reference.
+AntarPool supports two deployment workflows depending on your targeted environment.
 
-## Topology
-- **Supabase** – Postgres + Realtime (run `deploy/supabase_schema.sql`).
-- **Client app** – Vercel/Netlify project, root directory `client`.
-- **Business app** – second project, root directory `business`.
-- The legacy `server/` is **not deployed** in this setup.
+## 1. Demo Target (100% Free - Supabase + Vercel / Netlify)
 
-## Environment matrix
-| Project | Variables |
-|---|---|
-| client | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` |
-| business | same two + `VITE_OPERATOR_USER`, `VITE_OPERATOR_PASS` |
+Designed for rapid showcasing without maintaining a server.
+- **Detailed Step-by-Step Guide:** Refer to [`deploy/STEP_BY_STEP_GUIDE.md`](../deploy/STEP_BY_STEP_GUIDE.md).
+- **Client App Deployment:**
+  - Build command: `npm run build`
+  - Output directory: `dist`
+  - Environment variables:
+    ```env
+    VITE_BACKEND=supabase
+    VITE_SUPABASE_URL=https://your-project.supabase.co
+    VITE_SUPABASE_ANON_KEY=your-anon-key
+    ```
+- **Business App Deployment:**
+  - Same environment variables as client app.
 
-Vite inlines these at **build time**; redeploy after changing them.
+---
 
-## SPA routing
-`client/public/_redirects` and `business/public/_redirects` handle Netlify. Vercel needs no config for hash-less single-page apps in this project (no client-side routes beyond `/`).
+## 2. Production Target (Self-Hosted Node.js Server + VPS / Container)
 
-## Pre-deploy checklist
-- [ ] `deploy/check_ready.bat` passes (both builds)
-- [ ] `npm run lint` clean in both apps
-- [ ] Operator password changed from default
-- [ ] RLS policies tightened if real customers will use it ([SECURITY.md](SECURITY.md))
-- [ ] Seed data replaced with real pools/vehicles/prices
-- [ ] Supabase project region = Singapore; consider Pro tier (free projects pause after inactivity)
+Recommended when running real passenger operations with payment gateways and persistent data.
 
-## Post-deploy verification
-1. Business app shows the login gate; log in.
-2. Top bar shows live connection.
-3. Book a ticket from the client app on a phone → operator hears the voice alert within ~1 s.
-4. Mark paid / check in / cancel; verify timeline entries and seat release.
-5. Supabase Table Editor → `bookings` shows the row.
+### Architecture
+- **Backend Service:** Node.js Express server (`server/src/server.js`) hosted on a VPS (DigitalOcean, Hetzner, AWS EC2, Railway, or Render with persistent volume).
+- **Database:** SQLite (`server/travel.db`) on a persistent volume, or PostgreSQL.
+- **Frontend Apps:** Deployed to Vercel, Netlify, Cloudflare Pages, or static Nginx.
 
-## Updating the database
-There are no migrations. For schema changes on a live project, write a manual `ALTER TABLE` script, test on a copy, and also update `supabase_schema.sql`. Back up via Supabase dashboard before changes.
+### Server Environment Variables (`server/.env`)
+```env
+PORT=5000
+OPERATOR_USER=operator_admin
+OPERATOR_PASS=YourStrongPasswordHere!
+JWT_SECRET=super_secret_jwt_key_64_characters_min
+CLIENT_URL=https://travel.yourdomain.com
+BUSINESS_URL=https://admin.yourdomain.com
+DATABASE_PATH=/var/data/travel.db
+```
 
-## Known deployment issues
-- `deploy/env_templates/{backend,client,business}.env.example` refer to the old Render/Zeabur setup; use `supabase.env.example`.
-- Free Supabase projects pause after ~1 week of inactivity — first visit afterwards will fail until resumed.
-- `.url` shortcuts and `start_all.bat` are local-dev conveniences only.
+> [!IMPORTANT]
+> If deploying SQLite to a container platform like Railway or Render, ensure you mount a **persistent volume** to `/var/data/` (or the folder containing `travel.db`). Without a persistent volume, database changes will be wiped on container restart or redeploy.
+
+### Frontend Environment Variables (`client/.env` and `business/.env`)
+```env
+VITE_BACKEND=rest
+VITE_API_URL=https://api.yourdomain.com
+```
+
+---
+
+## Pre-Deployment Verification
+
+Before pushing code to production or deploying:
+```bash
+# 1. Run compiler check
+deploy\check_ready.bat
+
+# 2. Run automated contract & concurrency test suite
+npm test
+```
+
+Expected output:
+```
+✔ 1. Spots endpoint returns seeded terminal pooling spots
+✔ 2. Operator authentication succeeds with valid credentials and rejects invalid
+✔ 3. Protected business routes return 401 without valid operator token
+✔ 4. Atomic booking creation, seat collision prevention, and concurrency check
+✔ 5. Armada update automatically synchronizes schedule layout and capacity
+✔ 6. Analytics report reflects active and pending totals
+ℹ pass 6
+ℹ fail 0
+```

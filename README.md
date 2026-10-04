@@ -1,104 +1,142 @@
-# 🚗 Car Travel & Rental Platform (Travel Pooling)
+# 🚗 AntarPool Travel & Rental Platform
 
-A full-stack, real-time travel pooling platform consisting of two responsive web applications (**Client App** for passengers and **Business App** for operators) connected to a shared backend and SQLite database with real-time WebSocket order broadcasting, custom vehicle fleet layout builder, and Indonesian Text-to-Speech voice alerts.
-
----
-
-## 📖 Complete Documentation
-For full technical specifications, architecture diagrams, database schema, API reference, and troubleshooting guides, refer to:
-👉 **[DOCUMENTATION.md](file:///c:/Users/kiris/OneDrive/Documents/AI%20Projects/Car%20-%20Travel%20and%20Rental/DOCUMENTATION.md)**
+A full-stack, real-time travel pooling platform designed for inter-city shuttle services in Indonesia (routes: Surabaya ⇄ Malang). It features two responsive web applications:
+- **Client App (`client/`)**: Passenger booking portal with interactive seat layout picker, digital boarding pass with QR, and ticket self-cancellation.
+- **Business App (`business/`)**: Operator management dashboard with live order timelines, Indonesian voice announcements (`id-ID`), interactive fleet cabin layout builder, and business analytics.
 
 ---
 
-## 📁 Architecture & Subfolder Structure
+## 📚 Documentation Hub
+
+The complete, active technical documentation is maintained in the [`docs/`](docs/) directory:
+
+- 📐 **[Architecture & Dual Targets](docs/ARCHITECTURE.md)**: Details on the Demo (Supabase) vs Production (Express + SQLite) operational split and dynamic adapter pattern.
+- 📋 **[Architecture Decision Records](docs/DECISIONS.md)**: ADRs on operational split, dynamic adapters, atomic double-booking prevention, and JWT authentication.
+- 💻 **[Development Guide](docs/DEVELOPMENT.md)**: Monorepo workspace setup, environment variables, commands, and conventions.
+- 🗄️ **[Database Schema](docs/DATABASE.md)**: Tables, `booking_seats` atomic locking, partial unique indexes, and RLS policies.
+- 🔌 **[API Reference](docs/API_REFERENCE.md)**: Front-end data contract, REST endpoints, and JWT authentication.
+- 🧪 **[Testing Guide](docs/TESTING.md)**: Contract tests, 10-parallel-request concurrency verification, and test execution.
+- 🔒 **[Security Policy](docs/SECURITY.md)**: Operator access control, vulnerability status matrix, and production hardening checklist.
+- 🚀 **[Deployment Guide](docs/DEPLOYMENT.md)**: Deployment steps for Vercel (Demo) and VPS with persistent storage (Production).
+- 🗺️ **[Roadmap & Backlog](docs/ROADMAP.md)**: Completed hardening milestones and prioritized future backlog.
+- 👥 **[User Guide](docs/USER_GUIDE.md)**: Operational guide for passengers and dispatchers.
+
+> [!NOTE]
+> The root [`DOCUMENTATION.md`](DOCUMENTATION.md) is preserved as the initial prototype specification. For current architecture and configuration, always refer to [`docs/`](docs/).
+
+---
+
+## 🏗️ System Architecture & Dual Operational Targets
+
+AntarPool supports two operational targets configured via the `VITE_BACKEND` environment variable using an **Adapter Pattern**:
+
+```
+                          ┌───────────────────────────┐
+                          │   Client / Business UI    │
+                          └─────────────┬─────────────┘
+                                        │
+                         ┌──────────────┴──────────────┐
+                         ▼                             ▼
+              [ Supabase Adapter ]             [ REST Adapter ]
+                         │                             │
+                         ▼                             ▼
+              Demo Target (Vercel)          Production Target (VPS)
+            - Direct Supabase queries     - Express REST API (Port 5000)
+            - Realtime channel updates    - SQLite with WAL & Async Mutex
+            - Zero-cost prototype         - Atomic booking in booking_seats
+                                          - Server-side price calculation
+                                          - HMAC-SHA256 JWT Operator Auth
+```
+
+1. **Demo Target (`VITE_BACKEND=supabase`)**:
+   - Zero-cost deployment on Vercel + Supabase free tier.
+   - Ideal for client presentations, design reviews, and portfolio demonstration.
+2. **Production Target (`VITE_BACKEND=rest`)**:
+   - Maintained Node.js Express server + SQLite with Write-Ahead Logging (`WAL`).
+   - Atomic seat booking backed by `booking_seats` table and partial unique indexes (`WHERE status != 'CANCELLED'`).
+   - Server-side pricing computation and collision-resistant booking code generation.
+   - Stateless HMAC-SHA256 JWT authentication for operator endpoints.
+
+---
+
+## 📁 Repository Structure
 
 ```
 Car - Travel and Rental/
 ├── client/                     # Passenger Booking Web App (Port 5173)
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── AuthModal.jsx          # Login via Phone (OTP), Email, Google + Name
-│   │   │   ├── InteractiveSeatMap.jsx # Dynamic vehicle seat layout engine
-│   │   │   └── TicketPass.jsx         # Digital Boarding Pass with QR & directions
-│   │   ├── App.jsx                    # Main booking flow & 'Tiket Saya' history
-│   │   └── utils.js                   # IDR currency & Indonesian date helpers
-│   ├── package.json
-│   └── vite.config.js
-│
+│   │   ├── adapters/          # Supabase & REST backend adapters
+│   │   ├── components/        # InteractiveSeatMap, TicketPass, AuthModal
+│   │   ├── api.js             # Dynamic backend dispatcher
+│   │   └── App.jsx            # Booking flow & 'Tiket Saya' drawer
 ├── business/                   # Operator & Admin Dashboard (Port 5174)
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── ScheduleModal.jsx      # Schedule creator with Armada picker
-│   │   │   └── ArmadaModal.jsx        # Interactive cabin layout editor (Rows x Cols)
-│   │   ├── App.jsx                    # Tabs: Orders, Schedules, Armadas, Analytics
-│   │   ├── voiceNotifier.js           # Web Audio chime + SpeechSynthesis (id-ID)
-│   │   └── utils.js                   # IDR formatters
-│   ├── package.json
-│   └── vite.config.js
-│
-├── server/                     # Shared Backend & SQLite Database (Port 5000)
+│   │   ├── adapters/          # Supabase & REST backend adapters
+│   │   ├── components/        # ArmadaModal, ScheduleModal, LoginGate
+│   │   ├── api.js             # Dynamic backend dispatcher
+│   │   ├── voiceNotifier.js   # Web Audio chime + SpeechSynthesis (id-ID)
+│   │   └── App.jsx            # Orders, Schedules, Armadas, Analytics
+├── server/                     # Production REST Backend (Port 5000)
 │   ├── src/
-│   │   ├── db.js               # Database schema, migrations & prototype seeder
-│   │   └── server.js           # Express REST API + WebSocket Server
-│   ├── travel.db               # SQLite database file
-│   ├── test_integration.py     # Automated test script
-│   └── package.json
-│
-├── start_all.bat               # 1-Click launcher starting all 3 servers
-├── Client App (Passenger).url  # Browser shortcut to http://localhost:5173
-├── Business App (Operator).url # Browser shortcut to http://localhost:5174
-├── DOCUMENTATION.md            # Comprehensive project documentation
-└── README.md                   # Quick overview
+│   │   ├── db.js              # SQLite schema, WAL pragma, async mutex
+│   │   └── server.js          # Express API, JWT auth, atomic booking
+│   ├── travel.db              # SQLite database file
+│   └── test_integration.py    # Python integration test script
+├── shared/                     # Shared Monorepo Package (@antarpool/shared)
+│   └── src/index.js           # IDR currency & Indonesian date formatters
+├── tests/                      # Automated Contract & Concurrency Tests
+│   └── contract.test.js       # Node.js contract & race condition test suite
+├── deploy/                     # Deployment configs, SQL schemas & env templates
+├── docs/                       # Complete documentation suite
+└── package.json                # Monorepo workspaces root configuration
 ```
 
 ---
 
-## 🚀 Running the Applications
+## ⚡ Quick Start
 
-### 1-Click Launcher (Windows)
-Double click **`start_all.bat`** in the project folder to start all 3 server windows.
+### Prerequisites
+- Node.js 18+ (tested on Node.js 20/22)
+- npm 9+
 
-### Manual Terminal Commands
+### Installation
+Install dependencies across all workspace packages from the root:
 ```bash
-# 1. Backend Server (Port 5000)
-cd server
-npm start
-
-# 2. Client Web App (Port 5173)
-cd client
-cmd /c "npm run dev"
-
-# 3. Business Web App (Port 5174)
-cd business
-cmd /c "npm run dev"
+npm install
 ```
+
+### Running Tests
+Run the comprehensive contract and concurrency test suite:
+```bash
+npm test
+```
+*This validates schedule retrieval, seat reservation constraints, 10-parallel-request race conditions, cancellation seat recycling, armada layout syncing, and operator authorization.*
+
+### Running in Development
+
+#### Option A: Production Mode (Local Express Server + SQLite)
+```bash
+# 1. Start the backend server (Port 5000)
+npm run start:server
+
+# 2. In separate terminals, start passenger and operator apps
+npm run dev:client
+npm run dev:business
+```
+
+#### Option B: Demo Mode (Direct Supabase)
+Ensure `client/.env` and `business/.env` contain your Supabase credentials:
+```bash
+npm run dev:client
+npm run dev:business
+```
+
+Or run all services simultaneously using `start_all.bat` on Windows.
 
 ---
 
-## 🌟 Key Features
+## 🔐 Operator Access
 
-### 👤 Client Application (`client/` - Port 5173)
-- **Authentication**: Sign in using Phone Number, Email, or Google Account with full name entry.
-- **Pooling Spots**: Preloaded with **Pool Surabaya** and **Pool Malang** for prototype testing.
-- **Live Schedules**: Real-time departure times, pricing in IDR (`Rp`), and remaining seats with sold-out warnings.
-- **Dynamic Vehicle Seat Map**: Automatically renders the exact cabin layout configured by the operator for that vehicle. Passengers pick specific seats (e.g. 1A, 2B) with instant total price recalculation.
-- **Pay on Arrival**: Notice confirming payment is made when arriving at the departure pool without upfront deposit.
-- **Digital Boarding Pass**: Generated ticket pass with unique booking code, QR code for on-site scanning, and route directions.
-- **Tiket Saya**: History drawer to access previous and active travel passes.
-
-### 🏢 Business Application (`business/` - Port 5174)
-- **Indonesian Voice Notifications (`id-ID`)**: Hands-free real-time audio announcements using the Web Speech API and harmonic audio chime:
-  > *"Pesanan baru dari Pool Surabaya ke Malang. Pemesan Rian Pratama, 2 kursi, keberangkatan pukul 08:30"*
-- **Order Management**: Receive bookings via WebSockets. Actions:
-  - **Terima Bayar di Pool**: Mark payment as paid upon customer arrival.
-  - **Check-in Armada**: Check passenger into vehicle.
-  - **Batalkan Pesanan**: Cancel booking and release seats.
-- **Manajemen Armada (Fleet & Custom Layout Editor)**:
-  - Add vehicles by specifying dimensions (e.g., 2-7 rows × 2-5 columns).
-  - Interactive click editor to set cell types: **Kursi (Seat)**, **Supir (Driver)**, **Lorong (Aisle)**, and **Kosong (Empty)**.
-  - Remove armada option with safety checks.
-- **Jadwal & Tarif Management**: Create and edit trips with the **Armada Option Picker** that automatically binds the vehicle's model, capacity, and seat layout.
-- **Statistik & Laporan Dashboard**:
-  - Revenue breakdown: Paid Revenue (`PAID`) vs Pending Revenue (`PENDING`).
-  - Total Booking volume and passengers count.
-  - Top performing routes and hourly booking density.
+When running against the Production REST backend, the Business dashboard is protected by an operator login gate:
+- Default Operator Password: `antarpool2026`
+- Configurable via `OPERATOR_PASSWORD` environment variable in `server/.env`.

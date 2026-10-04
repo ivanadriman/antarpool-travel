@@ -1,80 +1,102 @@
 # Architecture
 
-## Two runtime modes
+## Two Targeted Deployments
 
-Both frontends contain a data layer (`src/api.js`) that picks a backend **at build/start time**:
+AntarPool explicitly separates two operational targets using a unified codebase and the **Adapter Pattern**:
 
-```js
-if (isSupabaseConfigured) { /* talk directly to Supabase */ }
-else { fetch(`${VITE_API_URL}/api/...`) }   // legacy Express server
-```
-
-`isSupabaseConfigured` is true when both `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` are set (`src/supabase.js`).
-
-| | **Supabase mode (current / production)** | **Legacy mode (local prototype)** |
-|---|---|---|
-| Database | Supabase PostgreSQL ([schema](../deploy/supabase_schema.sql)) | SQLite `server/travel.db` |
-| Business logic | In the browser (`api.js`) | In `server/src/server.js` |
-| Realtime | Supabase Realtime `postgres_changes` | `ws` WebSocket on port 5000 |
-| Hosting | Vercel/Netlify static sites + Supabase | `node server/src/server.js` |
+1. **Demo Target (Supabase / Vercel / Netlify):** Zero-cost serverless prototype for public showcase. Uses Supabase PostgreSQL directly via `@supabase/supabase-js` and Supabase Realtime for order alerts.
+2. **Production Target (Custom Server / Self-Hosted):** High-reliability target with server-enforced business rules, JWT authentication, atomic concurrency locks, and payment/webhook readiness. Uses `server/src/server.js` (Express + SQLite with WAL mode + WebSockets).
 
 ```mermaid
-flowchart LR
-  C["Client app (passenger)<br/>Vite :5173"] -->|supabase-js| S[("Supabase<br/>Postgres + Realtime")]
-  B["Business app (operator)<br/>Vite :5174"] -->|supabase-js| S
-  S -- "postgres_changes" --> B
-  B --> V["Web Speech id-ID + chime"]
-  C -. "legacy: REST" .-> E["Express :5000 + SQLite"]
-  B -. "legacy: REST + WS" .-> E
+flowchart TD
+  subgraph Frontend Apps
+    Client["Client App (Passenger)<br/>Vite :5173"]
+    Business["Business App (Operator)<br/>Vite :5174"]
+  end
+
+  subgraph Data Layer ["api.js (Dynamic Adapter Dispatch)"]
+    Switch{"VITE_BACKEND<br/>'supabase' | 'rest'"}
+    SubA["supabaseAdapter.js"]
+    RestA["restAdapter.js"]
+  end
+
+  Client --> Switch
+  Business --> Switch
+  Switch -->|Demo Target| SubA
+  Switch -->|Production Target| RestA
+
+  SubA -->|Direct PostgreSQL + Realtime| Supabase[("Supabase Cloud<br/>DB + Realtime")]
+  RestA -->|Bearer JWT + REST + WS| Express["Node.js Express Server<br/>Port 5000"]
+  Express -->|Atomic Transactions| SQLite[("SQLite Database<br/>WAL Mode + booking_seats")]
 ```
 
-> [!WARNING]
-> The two modes are **not feature-identical**. Supabase mode is the maintained path. Because logic is duplicated (client-side vs. `server.js`), any behavior change must be made in both or the legacy server should be retired (see [ROADMAP.md](ROADMAP.md)). Example drift: `server/test_integration.py` assumes pool ids/cities (Senayan, Dipatiukur) that no longer exist in the seed data.
+## The Adapter Pattern (`src/api.js`)
 
-## Code map
+Each application (`client/` and `business/`) exposes a unified data interface through `src/api.js`. The active adapter is selected at startup/build time:
 
-```
-client/                       Passenger app (React 19, Vite, Tailwind 4, lucide-react)
-  src/App.jsx                 Search → schedule → seat map → booking → "Tiket Saya" drawer
-  src/api.js                  getSpots, getSchedules, createBooking, lookupBookings, cancelBooking
-  src/supabase.js             Supabase client + isSupabaseConfigured flag
-  src/utils.js                formatIDR, formatDateID
-  src/components/
-    AuthModal.jsx             Phone/Email/Google "login" (simulated; stores travel_user in localStorage)
-    InteractiveSeatMap.jsx    Renders armada layout grid, handles seat toggling
-    TicketPass.jsx            Boarding pass, QR, cancel button
-    ErrorBoundary.jsx
-business/                     Operator app (same stack)
-  src/App.jsx                 Tabs: Orders, Schedules, Armada, Timeline, Analytics; realtime subscriptions
-  src/api.js                  Bookings, schedules, armadas, timeline, analytics
-  src/voiceNotifier.js        Chime (Web Audio) + SpeechSynthesis (id-ID)
-  src/components/
-    LoginGate.jsx             Operator login (client-side credential check)
-    ScheduleModal.jsx         Create/edit schedule with armada picker
-    ArmadaModal.jsx           Seat grid editor (2–7 rows × 2–5 cols)
-    OrderTimeline.jsx         Audit trail view with filters
-server/                       Legacy Express + SQLite + ws (db.js seeds data, server.js routes)
-deploy/                       supabase_schema.sql, env templates, check_ready.bat, deployment guide
+```javascript
+import * as supabaseAdapter from './adapters/supabaseAdapter';
+import * as restAdapter from './adapters/restAdapter';
+import { isSupabaseConfigured } from './supabase';
+
+const configuredBackend = import.meta.env.VITE_BACKEND;
+const activeBackend = configuredBackend
+  ? configuredBackend.toLowerCase()
+  : (isSupabaseConfigured ? 'supabase' : 'rest');
+
+export const adapter = activeBackend === 'supabase' ? supabaseAdapter : restAdapter;
 ```
 
-## Key flows
+Both adapters adhere to an identical contract and method signatures:
+- In `client/`: `getSpots()`, `getSchedules(...)`, `createBooking(...)`, `lookupBookings(...)`, `cancelBooking(...)`
+- In `business/`: `getBusinessBookings(...)`, `getArmadas()`, `getSpots()`, `getBusinessSchedules(...)`, `updateBookingStatus(...)`, `saveSchedule(...)`, `deleteSchedule(...)`, `saveArmada(...)`, `deleteArmada(...)`, `getTimeline()`, `getAnalytics()`
 
-**Booking (client `createBooking`)**
-1. Read non-cancelled bookings for `(schedule_id, travel_date)`; reject if any chosen seat is taken.
-2. Read schedule for price; compute `total_price = price × seats`.
-3. Generate code `TRV-<yymmdd>-<4 random chars>`; insert booking (`PENDING`/`CONFIRMED`).
-4. Insert `ORDER_PLACED` timeline event (failure swallowed).
-5. Business app receives INSERT via Supabase Realtime → chime + voice + list refresh.
+## Code Map
 
-**Operator status changes (`updateBookingStatus`)**: updates `payment_status`/`booking_status` and writes a matching timeline event (`PAYMENT_RECEIVED`, `PASSENGER_CHECKED_IN`, `ORDER_CANCELLED`).
+```
+antarpool-travel/
+├── package.json              # Monorepo root with npm workspaces (client, business, server, shared)
+├── tests/
+│   └── contract.test.js      # Automated contract & concurrency test suite (Node test runner)
+├── shared/                   # Shared monorepo package (@antarpool/shared)
+│   └── src/index.js          # Shared currency (formatIDR) and date formatters
+├── client/                   # Passenger Booking Web App (Port 5173)
+│   ├── src/
+│   │   ├── adapters/
+│   │   │   ├── supabaseAdapter.js
+│   │   │   └── restAdapter.js
+│   │   ├── api.js            # Unified contract dispatcher
+│   │   ├── components/
+│   │   │   ├── AuthModal.jsx
+│   │   │   ├── InteractiveSeatMap.jsx
+│   │   │   └── TicketPass.jsx
+│   │   └── App.jsx
+├── business/                 # Operator Admin Dashboard (Port 5174)
+│   ├── src/
+│   │   ├── adapters/
+│   │   │   ├── supabaseAdapter.js
+│   │   │   └── restAdapter.js
+│   │   ├── api.js            # Unified contract dispatcher
+│   │   ├── components/
+│   │   │   ├── LoginGate.jsx # Authenticates against /api/business/login in REST mode
+│   │   │   ├── ScheduleModal.jsx
+│   │   │   ├── ArmadaModal.jsx
+│   │   │   └── OrderTimeline.jsx
+│   │   ├── voiceNotifier.js  # Indonesian Web Speech + audio chime
+│   │   └── App.jsx
+├── server/                   # Production Backend Server (Port 5000)
+│   ├── src/
+│   │   ├── db.js             # SQLite WAL mode, withTransaction mutex, booking_seats table
+│   │   └── server.js         # Express REST API, JWT auth, requireOperator, atomic bookings, WebSockets
+│   ├── test_integration.py   # Python integration test script
+│   └── travel.db             # Local SQLite database
+└── docs/                     # Documentation suite
+```
 
-**Seat availability** is *derived*, never stored: capacity minus seats in non-cancelled bookings for that date. Schedules are recurring daily templates (time + price + vehicle); a trip instance is `schedule × travel_date`.
+## Atomic Booking & Seat Collision Model
 
-**Sessions**
-- Passenger: `localStorage.travel_user` (`{name, phone/email, method}`); “Tiket Saya” queries by `customer_phone`.
-- Operator: `localStorage`/`sessionStorage` key `antarpool_operator_auth`.
-
-## Seat layout format
-
-`armadas.layout_json` / `schedules.vehicle_layout`: array of rows, each an array of cells
-`{ "type": "seat" | "aisle" | "empty" | "driver", "label": "1A" }`. Seat labels are the booking identifiers stored in `bookings.seat_numbers`. The layout is **copied** onto the schedule when an armada is assigned (denormalized); editing an armada must re-sync schedules (legacy server does this; the Supabase path in `saveArmada` does **not**—see ROADMAP).
+Double booking is prevented at the database level in both targets:
+1. **`booking_seats` Table:** Stores one row per reserved seat (`schedule_id`, `travel_date`, `seat_number`, `status`).
+2. **Partial Unique Index:** `UNIQUE(schedule_id, travel_date, seat_number) WHERE status != 'CANCELLED'`.
+3. **Serialized Locking (`withTransaction`):** In the Node.js production server, an asynchronous mutex synchronizes concurrent booking requests, executing them under `BEGIN IMMEDIATE ... COMMIT`. If any seat is taken or violates the index, a `409 Conflict` status is immediately returned with the colliding seats.
+4. **Cancellation:** When an order is cancelled by the passenger or operator, `status` in `booking_seats` is updated to `'CANCELLED'`, instantaneously releasing the seat for re-booking without deleting the audit trail.

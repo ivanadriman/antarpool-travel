@@ -12,10 +12,47 @@ export default function LoginGate({ onLoginSuccess }) {
   const EXPECTED_USER = import.meta.env.VITE_OPERATOR_USER || 'admin';
   const EXPECTED_PASS = import.meta.env.VITE_OPERATOR_PASS || 'antarpool2026';
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMessage('');
 
+    const backendMode = import.meta.env.VITE_BACKEND || (import.meta.env.VITE_SUPABASE_URL ? 'supabase' : 'rest');
+
+    if (backendMode === 'rest') {
+      try {
+        const apiBase = import.meta.env.VITE_API_URL || '';
+        const res = await fetch(`${apiBase}/api/business/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: username.trim(), password })
+        });
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok || !data.success) {
+          setErrorMessage(data.error || 'Username atau kata sandi operator salah.');
+          return;
+        }
+
+        const authData = {
+          username: username.trim(),
+          role: 'operator',
+          loggedInAt: new Date().toISOString()
+        };
+
+        const storage = rememberMe ? localStorage : sessionStorage;
+        storage.setItem('antarpool_operator_auth', JSON.stringify(authData));
+        storage.setItem('antarpool_operator_token', data.token);
+
+        onLoginSuccess(authData);
+        return;
+      } catch (err) {
+        console.error('Login request failed:', err);
+        setErrorMessage('Gagal menghubungi server operator. Pastikan server aktif.');
+        return;
+      }
+    }
+
+    // Demo Mode (Supabase) fallback credentials
     if (username.trim() === EXPECTED_USER && password === EXPECTED_PASS) {
       const authData = {
         username: username.trim(),
@@ -23,11 +60,8 @@ export default function LoginGate({ onLoginSuccess }) {
         loggedInAt: new Date().toISOString()
       };
 
-      if (rememberMe) {
-        localStorage.setItem('antarpool_operator_auth', JSON.stringify(authData));
-      } else {
-        sessionStorage.setItem('antarpool_operator_auth', JSON.stringify(authData));
-      }
+      const storage = rememberMe ? localStorage : sessionStorage;
+      storage.setItem('antarpool_operator_auth', JSON.stringify(authData));
 
       onLoginSuccess(authData);
     } else {

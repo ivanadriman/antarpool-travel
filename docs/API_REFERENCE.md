@@ -1,49 +1,109 @@
 # API Reference
 
-In Supabase mode there is no custom backend; the "API" is the `src/api.js` module in each app. The legacy Express endpoints are listed second.
+The frontend applications access data through unified adapter interfaces (`client/src/api.js` and `business/src/api.js`). Depending on the target configured, calls are routed to Supabase or the production Node.js Express server.
 
-## Data layer – `client/src/api.js`
-| Function | Description |
-|---|---|
-| `getSpots()` | Active pooling spots, ordered by city/name |
-| `getSchedules(originId, destId, travelDate)` | Active schedules for route, enriched with `origin_*`, `destination_*`, `booked_seats[]`, `available_seats_count`, `is_sold_out` |
-| `createBooking(payload)` | `payload = {schedule_id, travel_date, customer_name, customer_phone, customer_email, auth_method, seat_numbers[]}`. Throws `Kursi X sudah dipesan…` on collision. Returns booking + route/vehicle fields |
-| `lookupBookings({phone, code})` | Bookings by exact phone or uppercase code, newest first |
-| `cancelBooking(bookingId, phone)` | Sets both statuses to `CANCELLED`, logs timeline. (`phone` only used by legacy server) |
+## Data Layer Interface (`src/api.js`)
 
-## Data layer – `business/src/api.js`
-| Function | Description |
-|---|---|
-| `getBusinessBookings({date, status, payment_status})` | Filtered bookings with route/time |
-| `getBusinessSchedules(date)` | All schedules (incl. inactive) with `booked_seats_count`, `remaining_seats` for `date` |
-| `updateBookingStatus(id, paymentStatus, bookingStatus)` | Partial update + timeline event |
-| `saveSchedule(obj)` / `deleteSchedule(id)` | Upsert; delete refuses when active bookings exist |
-| `getArmadas()` / `saveArmada(obj)` / `deleteArmada(id)` | Fleet CRUD (`saveArmada` returns `{success, error}`) |
-| `getTimeline()` | All timeline events, newest first (no pagination) |
-| `getAnalytics()` | `{total_bookings, paid_revenue, pending_revenue, total_passengers, top_routes[5], time_distribution[]}` computed client-side from all non-cancelled bookings |
-| `getSpots()` | As above |
+### Passenger Client (`client/src/api.js`)
+| Method | Arguments | Returns | Description |
+|---|---|---|---|
+| `getSpots()` | None | `Promise<Spot[]>` | Fetches all active pooling terminals |
+| `getSchedules(...)` | `(originId, destId, date)` | `Promise<Schedule[]>` | Fetches routes with remaining seats count and booked seat IDs |
+| `createBooking(...)` | `({ schedule_id, travel_date, customer_name, customer_phone, customer_email, auth_method, seat_numbers })` | `Promise<Booking>` | Reserves seats atomically. Throws on collision with 409 status |
+| `lookupBookings(...)` | `({ phone, code })` | `Promise<Booking[]>` | Queries passenger bookings by phone number or booking code |
+| `cancelBooking(...)` | `(bookingId, phone)` | `Promise<Booking>` | Cancels booking and immediately releases seats |
 
-Return conventions are inconsistent: some functions **throw**, others **return `{success:false,error}`**. Standardize when refactoring.
+### Operator Dashboard (`business/src/api.js`)
+| Method | Arguments | Returns | Description |
+|---|---|---|---|
+| `getBusinessBookings(...)` | `({ date, status, payment_status })` | `Promise<Booking[]>` | Filtered bookings list (Protected) |
+| `getBusinessSchedules(...)` | `(targetDate)` | `Promise<Schedule[]>` | All schedules with live seat counts for the date (Protected) |
+| `updateBookingStatus(...)` | `(id, payment_status, booking_status)` | `Promise<Booking>` | Marks orders as PAID, COMPLETED, or CANCELLED (Protected) |
+| `saveSchedule(...)` | `(scheduleData)` | `Promise<{ success: true }>` | Creates or updates trip schedule (Protected) |
+| `deleteSchedule(...)` | `(scheduleId)` | `Promise<{ success: true }>` | Deletes schedule if no active orders exist (Protected) |
+| `getArmadas()` | None | `Promise<Armada[]>` | Retrieves registered fleet vehicles and cabin layouts |
+| `saveArmada(...)` | `(armadaData)` | `Promise<{ success: true }>` | Saves armada layout and synchronizes linked schedules (Protected) |
+| `deleteArmada(...)` | `(armadaId)` | `Promise<{ success: true }>` | Deletes fleet vehicle (Protected) |
+| `getTimeline()` | None | `Promise<TimelineEvent[]>` | Retrieves real-time audit trail events (Protected) |
+| `getAnalytics()` | None | `Promise<AnalyticsSummary>` | Summary statistics and top routes (Protected) |
 
-## Legacy REST (Express, `server/src/server.js`, port 5000)
+---
 
-Public
-- `GET /api/spots`
-- `GET /api/schedules?origin&destination&date`
-- `GET /api/schedules/:id?date`
-- `POST /api/bookings` – body as `createBooking`; broadcasts `NEW_BOOKING` over WS
-- `GET /api/bookings/lookup?phone=|code=`
-- `POST /api/bookings/:id/cancel` – body `{phone}`; broadcasts `BOOKING_UPDATED`
+## Production REST API Endpoints (`server/src/server.js`)
 
-Operator (no authentication!)
-- `GET /api/business/bookings?date&payment_status&status`
-- `PATCH /api/business/bookings/:id/status` – `{payment_status?, booking_status?}`
-- `GET|POST /api/armadas`, `PUT|DELETE /api/armadas/:id`
-- `GET /api/business/schedules?date`, `POST /api/business/schedules`, `PUT|DELETE /api/business/schedules/:id`
-- `GET /api/business/analytics`
-- `GET /api/business/timeline`
+Base URL: `http://localhost:5000` (or configured `VITE_API_URL`).
 
-WebSocket messages (`ws://host:5000`): `NEW_BOOKING`, `BOOKING_UPDATED`; the business app announces them via `voiceNotifier.js`.
+### 1. Authentication
+#### `POST /api/business/login`
+- **Request Body:** `{ "username": "admin", "password": "..." }`
+- **Response `200 OK`:**
+  ```json
+  {
+    "success": true,
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": { "username": "admin", "role": "operator" }
+  }
+  ```
+- **Response `401 Unauthorized`:** `{ "error": "Username atau password operator salah." }`
 
-## Supabase Realtime subscription (business app)
-Channel `business_orders_realtime` listens to `postgres_changes` on `bookings` (INSERT → voice "pesanan baru"; UPDATE to cancelled → voice cancellation) and `schedules`/timeline for refresh. Voice requires prior user interaction (autoplay policy); the UI has a "Uji Notifikasi Suara" button.
+### 2. Public Passenger Endpoints
+#### `GET /api/spots`
+Returns active pooling terminals.
+
+#### `GET /api/schedules?origin={id}&destination={id}&date={YYYY-MM-DD}`
+Returns matching trips for the date, computing remaining seats in real time.
+
+#### `POST /api/bookings`
+Atomically creates a booking.
+- **Request Body:**
+  ```json
+  {
+    "schedule_id": 1,
+    "travel_date": "2026-11-20",
+    "customer_name": "Rian Pratama",
+    "customer_phone": "081234567890",
+    "seat_numbers": ["1A", "2A"]
+  }
+  ```
+- **Response `201 Created`:** Booking details with generated `booking_code` (e.g. `TRV-261120-A4B2`).
+- **Response `400 Bad Request`:** Travel date is in the past, or departure time has passed today.
+- **Response `409 Conflict`:**
+  ```json
+  {
+    "error": "Kursi 1A sudah dipesan oleh penumpang lain. Silakan pilih kursi lain.",
+    "collision": ["1A"]
+  }
+  ```
+
+#### `GET /api/bookings/lookup?phone={number}&code={code}`
+Search bookings by phone or code.
+
+#### `POST /api/bookings/:id/cancel`
+- **Request Body:** `{ "phone": "081234567890" }`
+- **Security:** Requires matching customer phone or valid operator bearer token.
+- **Response `200 OK`:** Marks order cancelled and frees seats in `booking_seats`.
+
+### 3. Protected Operator Endpoints
+*Requires header: `Authorization: Bearer <token>` (Returns `401` if token is missing or invalid).*
+
+- **`GET /api/business/bookings`** – Filter orders by date, status, payment status.
+- **`PATCH /api/business/bookings/:id/status`** – Update payment and boarding state.
+- **`GET /api/business/schedules?date=YYYY-MM-DD`** – Live seat availability per trip.
+- **`POST /api/business/schedules`** / **`PUT /api/business/schedules/:id`** / **`DELETE /api/business/schedules/:id`** – Schedule management.
+- **`POST /api/armadas`** / **`PUT /api/armadas/:id`** / **`DELETE /api/armadas/:id`** – Fleet management (updates automatically sync to linked schedules).
+- **`GET /api/business/analytics`** – Revenue, booking counts, top routes.
+- **`GET /api/business/timeline`** – Order life-cycle audit trail.
+
+---
+
+## Real-Time Messaging & Voice Alerts
+
+### Production WebSocket (`ws://localhost:5000`)
+- **Connection:** `ws://localhost:5000?token=<operator_token>`
+- **Events Broadcasted:**
+  - `NEW_BOOKING`: Dispatched on new order creation. Contains `booking` object and `voiceText` in Indonesian for speech synthesis.
+  - `BOOKING_CANCELLED`: Dispatched when an order is cancelled.
+  - `BOOKING_UPDATED`: Dispatched when status changes (payment verified, checked in).
+
+### Demo Supabase Realtime
+Subscribes to `postgres_changes` on `bookings`, `schedules`, and `order_timeline_events` via the `business_orders_realtime` channel.

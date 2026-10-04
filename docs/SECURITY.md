@@ -1,30 +1,43 @@
-# Security Posture
+# Security Posture & Hardening
 
-> [!CAUTION]
-> The system is a **prototype**. Anyone who opens the deployed sites can read and modify all data using the public anon key. Do not handle real customer data or publicize the URLs until the P0 items below are done.
+This document assesses the system's security architecture, detailing implemented protections for the Production target and outlining remaining measures for high-scale enterprise readiness.
 
-## Current weaknesses
+## Security Status Matrix
 
-| # | Issue | Where | Impact |
+| # | Vulnerability / Concern | Status in Production Target (`server/`) | Status in Demo Target (`supabase`) |
 |---|---|---|---|
-| 1 | RLS policies are `USING (true)` for all operations | `deploy/supabase_schema.sql` | Anyone with the anon key (visible in the JS bundle) can read all bookings (names, phones, emails), edit prices, delete schedules/bookings |
-| 2 | Operator login is a client-side string compare with credentials in env vars baked into the bundle | `business/src/components/LoginGate.jsx` | Password readable by anyone; auth bypass by setting the localStorage key `antarpool_operator_auth` |
-| 3 | Passenger auth is simulated (any 4-digit OTP; Google not integrated) | `client/src/components/AuthModal.jsx` | Anyone can claim any phone number and view/cancel its tickets |
-| 4 | `lookupBookings` / `cancelBooking` have no ownership check | `client/src/api.js` | Booking IDs/codes/phones are enough to read/cancel anyone's ticket |
-| 5 | Seat collision check is read-then-insert (not atomic) | `createBooking` | Double booking under concurrency |
-| 6 | Booking code uses `Math.random` (4 chars) with no collision retry | `createBooking` | Collisions → insert fails (UNIQUE) ; codes guessable |
-| 7 | Price is read client-side and sent with insert | `createBooking` | Tampering possible (`price_per_seat`, `total_price` are client-supplied) |
-| 8 | Legacy Express server has no auth, permissive CORS configuration, no rate limiting | `server/src/server.js` | Same exposure as above |
-| 9 | Personal data (name/phone/email) stored plain, no retention/consent policy | DB | Indonesian PDP Law (UU 27/2022) obligations apply for production |
+| 1 | **Double-Booking Race Condition** | **RESOLVED:** Enforced via `booking_seats` table, DB partial unique index `WHERE status != 'CANCELLED'`, and `withTransaction` serialized locking. | **RESOLVED:** Schema updated with `booking_seats` table and partial unique index. |
+| 2 | **Operator Authentication & Access Control** | **RESOLVED:** Server issues signed HMAC-SHA256 JWTs via `POST /api/business/login`. All business and armada write endpoints protected with `requireOperator` middleware. | Kept as client-side gate by design (demo only with throwaway data). |
+| 3 | **Client-Side Price Tampering** | **RESOLVED:** Server ignores any client-supplied prices and strictly computes total price from `schedule.price` inside the transaction. | Validated in data adapter. |
+| 4 | **Booking Code Predictability & Collisions** | **RESOLVED:** Cryptographically generated via `crypto.randomBytes(3)` with collision retry loop. | Random hex generation. |
+| 5 | **Booking Past Trips / Cutoff** | **RESOLVED:** Server rejects bookings if travel date is in past or departure time has passed today. | Validated in data adapter. |
+| 6 | **Unauthorized Ticket Cancellation** | **RESOLVED:** `POST /api/bookings/:id/cancel` strictly verifies matching passenger phone number or valid operator bearer token. | Basic lookup check. |
+| 7 | **Database Access Control (RLS)** | N/A (Server accesses SQLite directly with no public DB port exposed). | Open RLS policies for prototype simplicity. Must tighten before putting real user data in Supabase. |
+| 8 | **Passenger Identity (Real OTP)** | **DEFERRED:** Phone number stored per session; real SMS/WhatsApp OTP (Twilio/Fonnte) scheduled for Phase 5. | Simulated OTP modal. |
 
-## Target design (recommended)
-1. **Operators:** Supabase Auth (email/password) with an `operators` table or a JWT `role` claim. RLS: operators get full access; `anon` gets read-only on `pooling_spots`, active `schedules`, and nothing else.
-2. **Passengers:** Supabase Auth phone OTP (via Twilio/other provider) or email magic link. `bookings.user_id = auth.uid()`; RLS lets users read/cancel only own rows.
-3. **Booking creation via a Postgres function (RPC)** or Edge Function: inside one transaction, check seat availability (`SELECT … FOR UPDATE` or a unique index on a `booking_seats(schedule_id, travel_date, seat)` table), read price server-side, insert booking + timeline event, return code from a secure generator.
-4. **Timeline events** written by DB triggers instead of the client.
-5. Move analytics aggregation to SQL views/RPC (avoids downloading every booking).
-6. Remove `VITE_OPERATOR_*` once Auth is in place; never put service-role keys in any `VITE_*` var.
+## Production Authentication Details
 
-## Secrets handling
-- `.env` files are git-ignored; keep it so. The anon key is *public by design* — security must come from RLS.
-- Rotate the anon/service keys in Supabase if they were ever committed.
+The Node.js server implements standard stateless JWT authentication:
+- **Algorithm:** HMAC-SHA256 (`HS256`).
+- **Token Expiry:** 12 hours (43,200 seconds).
+- **Transport:** HTTP `Authorization: Bearer <token>` header.
+- **WebSocket Security:** Connection query param `?token=<token>`.
+
+### Changing Operator Credentials in Production
+In `server/.env` (or environment variables on your hosting provider):
+```env
+OPERATOR_USER=custom_operator_name
+OPERATOR_PASS=strong_unpredictable_password_here
+JWT_SECRET=a_very_long_cryptographically_secure_random_string_64_characters
+```
+
+## Checklist Before Live Production
+
+- [x] Atomic seat reservations with unique database index.
+- [x] Server-side price calculation and code generation.
+- [x] Operator endpoints protected behind JWT authentication.
+- [x] Past departure time booking prevention.
+- [ ] Change default `JWT_SECRET` and `OPERATOR_PASS` in production `.env`.
+- [ ] Integrate SMS or WhatsApp gateway for real passenger phone OTP (UU PDP compliance).
+- [ ] Set up HTTPS / SSL on custom domain (required for secure cookies / Bearer headers in transit).
+- [ ] Attach persistent disk or volume to container so `travel.db` is preserved across restarts.

@@ -1,24 +1,32 @@
 # AntarPool Travel – Documentation Index
 
-AntarPool is an inter-city shuttle ("travel pooling") booking platform for Indonesia (prototype routes: Surabaya ⇄ Malang). Passengers book seats and pay at the pool on arrival. Operators manage orders, fleet and schedules, and get voice announcements for new orders.
+AntarPool is an inter-city shuttle ("travel pooling") booking platform for Indonesia (prototype routes: Surabaya ⇄ Malang). Passengers book seats and pay at the pool on arrival. Operators manage orders, fleet and schedules, and receive Indonesian voice announcements for new orders.
+
+---
+
+## 📚 Documentation Index
 
 | Document | Audience | Contents |
 |---|---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Developers | The two runtime modes (Supabase vs. legacy Express), data flow, code map |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Developers | Setup, env vars, running, conventions, common tasks, known gotchas |
-| [DATABASE.md](DATABASE.md) | Developers | Tables, columns, JSON shapes, status values, RLS, realtime |
-| [API_REFERENCE.md](API_REFERENCE.md) | Developers | Data-layer functions (`api.js`) and legacy REST endpoints |
-| [USER_GUIDE.md](USER_GUIDE.md) | Passengers & operators | How to book/cancel tickets; how to run daily operations |
-| [DEPLOYMENT.md](DEPLOYMENT.md) | Maintainers | Deploy checklist, env matrix, post-deploy verification |
-| [SECURITY.md](SECURITY.md) | Maintainers | Current security posture and what must change before production |
-| [ROADMAP.md](ROADMAP.md) | Everyone continuing the project | Gap analysis: what is missing/unfinished, prioritized |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Developers & Architects | Dual-target operational split (Demo vs. Production), adapter design, data flow, code map |
+| [DECISIONS.md](DECISIONS.md) | Developers & Architects | Architecture Decision Records (ADRs): targets, adapters, concurrency locking, JWT auth |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | Developers | Monorepo workspaces, environment variables, run commands, gotchas |
+| [DATABASE.md](DATABASE.md) | Developers & DBAs | Database schemas (SQLite & Supabase), `booking_seats` table, partial unique indexes, RLS |
+| [API_REFERENCE.md](API_REFERENCE.md) | Developers | Front-end `api.js` contract, REST endpoints, and JWT authentication |
+| [TESTING.md](TESTING.md) | QA & Developers | Contract testing suite, 10-parallel-request concurrency tests, test runner instructions |
+| [USER_GUIDE.md](USER_GUIDE.md) | Passengers & Operators | How to book and cancel tickets; how operators manage trips and fleet layouts |
+| [DEPLOYMENT.md](DEPLOYMENT.md) | DevOps & Maintainers | Deployment guides for Vercel (Demo) and VPS/Node.js with persistent disk (Production) |
+| [SECURITY.md](SECURITY.md) | Security & DevOps | Security posture, operator JWT authentication, and pre-production hardening checklist |
+| [ROADMAP.md](ROADMAP.md) | Project Managers & Devs | Completed hardening milestones and prioritized future backlog (P0, P1, P2) |
 
-## Status at a glance
+---
 
-- **Working:** passenger booking flow, dynamic seat maps, ticket pass with QR, self-cancel, operator order management, schedules, fleet layout editor, order timeline, analytics, voice alerts, Supabase realtime.
-- **Prototype-grade (not production-safe):** authentication (simulated OTP, client-side operator password), open database policies, no payment gateway, race-prone seat booking.
-- **Stale material:** root [`DOCUMENTATION.md`](../DOCUMENTATION.md) and [`README.md`](../README.md) describe the original Express + SQLite design; the app has since moved to Supabase (see ARCHITECTURE.md). `deploy/env_templates/` is also outdated (Render/Zeabur era). The documents in this folder are the current source of truth.
+## 🔍 System Status at a Glance
 
-## Other existing docs
-- [`deploy/STEP_BY_STEP_GUIDE.md`](../deploy/STEP_BY_STEP_GUIDE.md) – click-through Supabase + Vercel setup (still accurate).
-- `client/README.md`, `business/README.md` – unmodified Vite template text; ignore.
+- **Dual-Target Operational Support:**
+  - **Demo Target (`VITE_BACKEND=supabase`):** Zero-cost deployment on Vercel backed by Supabase with live realtime order subscriptions.
+  - **Production Target (`VITE_BACKEND=rest`):** Custom Node.js Express server + SQLite with WAL mode, atomic seat locking, server-side pricing, and JWT operator authentication.
+- **Atomic Concurrency Protection:** `booking_seats` table with partial unique index `UNIQUE(schedule_id, travel_date, seat_number) WHERE status != 'CANCELLED'`. Tested and verified under simultaneous parallel load.
+- **Operator Access Control:** Stateless HMAC-SHA256 JWT tokens protecting administrative endpoints.
+- **Frontend Monorepo:** Clean npm workspace structure (`client`, `business`, `server`, `shared`) with unified formatting utilities in `@antarpool/shared`.
+- **Primary Source of Truth:** All files in this `docs/` folder represent the active architecture. Root [`DOCUMENTATION.md`](../DOCUMENTATION.md) and [`README.md`](../README.md) describe the original initial prototype design.

@@ -1,11 +1,54 @@
+import crypto from 'node:crypto';
 import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import { WebSocketServer, WebSocket } from 'ws';
-import { initDb, dbAll, dbGet, dbRun } from './db.js';
+import { initDb, dbAll, dbGet, dbRun, withTransaction } from './db.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'antarpool-dev-secret-key-32charslong!!';
+const OPERATOR_USER = process.env.OPERATOR_USER || 'admin';
+const OPERATOR_PASS = process.env.OPERATOR_PASS || 'antarpool2026';
+
+function signJwt(payload, expiresInSeconds = 43200) {
+  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const fullPayload = { ...payload, iat: now, exp: now + expiresInSeconds };
+  const body = Buffer.from(JSON.stringify(fullPayload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  return `${header}.${body}.${signature}`;
+}
+
+function verifyJwt(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [header, body, signature] = parts;
+  const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(`${header}.${body}`).digest('base64url');
+  if (signature !== expectedSig) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    if (payload.exp && Math.floor(Date.now() / 1000) >= payload.exp) return null;
+    return payload;
+  } catch (e) {
+    return null;
+  }
+}
+
+function requireOperator(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Akses ditolak: Autentikasi operator diperlukan.' });
+  }
+  const token = authHeader.slice(7).trim();
+  const decoded = verifyJwt(token);
+  if (!decoded || decoded.role !== 'operator') {
+    return res.status(401).json({ error: 'Akses ditolak: Token operator tidak valid atau telah kedaluwarsa.' });
+  }
+  req.operator = decoded;
+  next();
+}
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -65,6 +108,23 @@ function broadcastToBusiness(payload) {
 }
 
 // ------------------- API ROUTES ------------------- //
+
+// 0. Operator Login
+app.post('/api/business/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username dan password wajib diisi.' });
+  }
+  if (username.trim() === OPERATOR_USER && password === OPERATOR_PASS) {
+    const token = signJwt({ username: username.trim(), role: 'operator' });
+    return res.json({
+      success: true,
+      token,
+      user: { username: username.trim(), role: 'operator' }
+    });
+  }
+  return res.status(401).json({ error: 'Username atau password operator salah.' });
+});
 
 // 1. Get all active pooling spots
 app.get('/api/spots', async (req, res) => {
@@ -206,6 +266,13 @@ app.post('/api/bookings', async (req, res) => {
       return res.status(400).json({ error: 'Missing required booking fields or seats' });
     }
 
+    // Check departure time cutoff for travel on today
+    const now = new Date();
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (travel_date < todayStr) {
+      return res.status(400).json({ error: 'Tidak dapat memesan tiket untuk tanggal yang sudah lewat.' });
+    }
+
     // Get schedule info
     const schedule = await dbGet(
       `SELECT s.*, 
@@ -222,99 +289,139 @@ app.post('/api/bookings', async (req, res) => {
       return res.status(404).json({ error: 'Schedule not found' });
     }
 
-    // Check if any requested seat is already booked for this schedule & date
-    const existingBookings = await dbAll(
-      `SELECT seat_numbers FROM bookings 
-       WHERE schedule_id = ? AND travel_date = ? AND booking_status != 'CANCELLED'`,
-      [schedule_id, travel_date]
-    );
-
-    const alreadyTaken = new Set();
-    existingBookings.forEach((b) => {
-      try {
-        const sList = JSON.parse(b.seat_numbers);
-        sList.forEach((s) => alreadyTaken.add(s));
-      } catch (e) {}
-    });
-
-    const collision = seat_numbers.filter((s) => alreadyTaken.has(s));
-    if (collision.length > 0) {
-      return res.status(409).json({
-        error: `Kursi ${collision.join(', ')} sudah dipesan oleh penumpang lain. Silakan pilih kursi lain.`,
-        collision
-      });
+    if (travel_date === todayStr && schedule.departure_time) {
+      const [depH, depM] = schedule.departure_time.split(':').map(Number);
+      const depMinutes = depH * 60 + depM;
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      if (currentMinutes >= depMinutes) {
+        return res.status(400).json({ error: `Jadwal keberangkatan pukul ${schedule.departure_time} untuk hari ini telah lewat.` });
+      }
     }
 
     const seatsCount = seat_numbers.length;
     const pricePerSeat = schedule.price;
     const totalPrice = pricePerSeat * seatsCount;
 
-    // Generate unique booking code e.g. TRV-2609-XXXX
-    const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const bookingCode = `TRV-${travel_date.replace(/-/g, '').slice(2)}-${randomSuffix}`;
-
-    const insertResult = await dbRun(
-      `INSERT INTO bookings 
-       (booking_code, schedule_id, travel_date, customer_name, customer_phone, customer_email, auth_method, seat_numbers, seats_count, price_per_seat, total_price, payment_method, payment_status, booking_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Bayar di Tempat (Pool)', 'PENDING', 'CONFIRMED')`,
-      [
-        bookingCode,
-        schedule_id,
-        travel_date,
-        customer_name,
-        customer_phone || '',
-        customer_email || '',
-        auth_method || 'phone',
-        JSON.stringify(seat_numbers),
-        seatsCount,
-        pricePerSeat,
-        totalPrice
-      ]
-    );
-
-    const newBooking = {
-      id: insertResult.lastID,
-      booking_code: bookingCode,
-      schedule_id,
-      travel_date,
-      customer_name,
-      customer_phone,
-      customer_email,
-      seat_numbers,
-      seats_count: seatsCount,
-      price_per_seat: pricePerSeat,
-      total_price: totalPrice,
-      payment_method: 'Bayar di Tempat (Pool)',
-      payment_status: 'PENDING',
-      booking_status: 'CONFIRMED',
-      departure_time: schedule.departure_time,
-      origin_name: schedule.origin_name,
-      origin_city: schedule.origin_city,
-      origin_address: schedule.origin_address,
-      destination_name: schedule.destination_name,
-      destination_city: schedule.destination_city,
-      destination_address: schedule.destination_address,
-      vehicle_model: schedule.vehicle_model,
-      created_at: new Date().toISOString()
-    };
-
-    // Log to order timeline
+    // Execute atomic booking transaction
+    let newBooking;
     try {
-      await dbRun(
-        `INSERT INTO order_timeline_events (booking_id, booking_code, event_type, actor_role, description, details_json, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [
-          newBooking.id,
-          bookingCode,
-          'ORDER_PLACED',
-          'CUSTOMER',
-          `Pesanan baru dibuat oleh ${customer_name} (${seatsCount} kursi: ${seat_numbers.join(', ')})`,
-          JSON.stringify({ seats: seat_numbers, total_price: totalPrice, travel_date, departure_time: schedule.departure_time }),
-          newBooking.created_at
-        ]
-      );
-    } catch (timelineErr) {
-      console.error('Error logging timeline for new order:', timelineErr);
+      newBooking = await withTransaction(async () => {
+        // Check if any requested seat is already booked in booking_seats where status != 'CANCELLED'
+        const placeholders = seat_numbers.map(() => '?').join(',');
+        const takenRows = await dbAll(
+          `SELECT seat_number FROM booking_seats 
+           WHERE schedule_id = ? AND travel_date = ? AND status != 'CANCELLED' AND seat_number IN (${placeholders})`,
+          [schedule_id, travel_date, ...seat_numbers]
+        );
+
+        if (takenRows && takenRows.length > 0) {
+          const collisions = takenRows.map((r) => r.seat_number);
+          const collisionErr = new Error(`Kursi ${collisions.join(', ')} sudah dipesan oleh penumpang lain. Silakan pilih kursi lain.`);
+          collisionErr.statusCode = 409;
+          collisionErr.collision = collisions;
+          throw collisionErr;
+        }
+
+        // Generate cryptographically unique booking code e.g. TRV-260922-XXXX with retry
+        let bookingCode = '';
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const randomSuffix = crypto.randomBytes(3).toString('hex').toUpperCase();
+          const candidateCode = `TRV-${travel_date.replace(/-/g, '').slice(2)}-${randomSuffix}`;
+          const exists = await dbGet('SELECT id FROM bookings WHERE booking_code = ?', [candidateCode]);
+          if (!exists) {
+            bookingCode = candidateCode;
+            break;
+          }
+        }
+        if (!bookingCode) {
+          bookingCode = `TRV-${travel_date.replace(/-/g, '').slice(2)}-${Date.now().toString(36).slice(-4).toUpperCase()}`;
+        }
+
+        const insertResult = await dbRun(
+          `INSERT INTO bookings 
+           (booking_code, schedule_id, travel_date, customer_name, customer_phone, customer_email, auth_method, seat_numbers, seats_count, price_per_seat, total_price, payment_method, payment_status, booking_status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Bayar di Tempat (Pool)', 'PENDING', 'CONFIRMED')`,
+          [
+            bookingCode,
+            schedule_id,
+            travel_date,
+            customer_name,
+            customer_phone || '',
+            customer_email || '',
+            auth_method || 'phone',
+            JSON.stringify(seat_numbers),
+            seatsCount,
+            pricePerSeat,
+            totalPrice
+          ]
+        );
+
+        const bookingId = insertResult.lastID;
+
+        // Insert seats into booking_seats (guaranteed unique by DB partial index)
+        for (const seat of seat_numbers) {
+          await dbRun(
+            `INSERT INTO booking_seats (booking_id, schedule_id, travel_date, seat_number, status)
+             VALUES (?, ?, ?, ?, 'CONFIRMED')`,
+            [bookingId, schedule_id, travel_date, seat]
+          );
+        }
+
+        // Log to order timeline
+        await dbRun(
+          `INSERT INTO order_timeline_events (booking_id, booking_code, event_type, actor_role, description, details_json, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            bookingId,
+            bookingCode,
+            'ORDER_PLACED',
+            'CUSTOMER',
+            `Pesanan baru dibuat oleh ${customer_name} (${seatsCount} kursi: ${seat_numbers.join(', ')})`,
+            JSON.stringify({ seats: seat_numbers, total_price: totalPrice, travel_date, departure_time: schedule.departure_time }),
+            new Date().toISOString()
+          ]
+        );
+
+        return {
+          id: bookingId,
+          booking_code: bookingCode,
+          schedule_id,
+          travel_date,
+          customer_name,
+          customer_phone,
+          customer_email,
+          seat_numbers,
+          seats_count: seatsCount,
+          price_per_seat: pricePerSeat,
+          total_price: totalPrice,
+          payment_method: 'Bayar di Tempat (Pool)',
+          payment_status: 'PENDING',
+          booking_status: 'CONFIRMED',
+          departure_time: schedule.departure_time,
+          origin_name: schedule.origin_name,
+          origin_city: schedule.origin_city,
+          origin_address: schedule.origin_address,
+          destination_name: schedule.destination_name,
+          destination_city: schedule.destination_city,
+          destination_address: schedule.destination_address,
+          vehicle_model: schedule.vehicle_model,
+          created_at: new Date().toISOString()
+        };
+      });
+    } catch (txErr) {
+      if (txErr.statusCode === 409) {
+        return res.status(409).json({
+          error: txErr.message,
+          collision: txErr.collision || seat_numbers
+        });
+      }
+      if (txErr.message && (txErr.message.includes('UNIQUE constraint failed') || txErr.message.includes('constraint'))) {
+        return res.status(409).json({
+          error: 'Salah satu kursi yang dipilih baru saja dipesan oleh penumpang lain.',
+          collision: seat_numbers
+        });
+      }
+      throw txErr;
     }
 
     // Broadcast in real-time to all connected business admin tabs with voice payload in Indonesian
@@ -327,10 +434,10 @@ app.post('/api/bookings', async (req, res) => {
       timestamp: Date.now()
     });
 
-    res.status(201).json(newBooking);
+    return res.status(201).json(newBooking);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Gagal membuat pesanan' });
+    console.error('Error creating booking:', err);
+    res.status(500).json({ error: 'Gagal membuat pesanan', details: err.message });
   }
 });
 
@@ -395,9 +502,14 @@ app.post('/api/bookings/:id/cancel', async (req, res) => {
       return res.status(400).json({ error: 'Pesanan yang sudah selesai/check-in tidak dapat dibatalkan' });
     }
 
-    // Optional ownership verification if phone provided
-    if (phone && booking.customer_phone && booking.customer_phone !== phone) {
-      return res.status(403).json({ error: 'Nomor telepon tidak sesuai dengan pemesan' });
+    // Verify ownership: must provide matching customer phone, or be authenticated operator
+    const authHeader = req.headers['authorization'];
+    const isOperator = authHeader && authHeader.startsWith('Bearer ') && verifyJwt(authHeader.slice(7).trim())?.role === 'operator';
+
+    if (!isOperator && booking.customer_phone) {
+      if (!phone || booking.customer_phone !== phone) {
+        return res.status(403).json({ error: 'Nomor telepon tidak sesuai dengan pemesan' });
+      }
     }
 
     await dbRun(
@@ -407,7 +519,15 @@ app.post('/api/bookings/:id/cancel', async (req, res) => {
       [id]
     );
 
-    // Log timeline event for cancellation by customer
+    // Release seat reservations in booking_seats
+    await dbRun(
+      `UPDATE booking_seats 
+       SET status = 'CANCELLED' 
+       WHERE booking_id = ?`,
+      [id]
+    );
+
+    // Log timeline event for cancellation
     try {
       await dbRun(
         `INSERT INTO order_timeline_events (booking_id, booking_code, event_type, actor_role, description, details_json)
@@ -416,9 +536,9 @@ app.post('/api/bookings/:id/cancel', async (req, res) => {
           booking.id,
           booking.booking_code,
           'ORDER_CANCELLED',
-          'CUSTOMER',
-          `Pesanan tiket dibatalkan secara mandiri oleh pelanggan (Tiket Saya)`,
-          JSON.stringify({ cancelled_by: 'CUSTOMER', phone: booking.customer_phone })
+          isOperator ? 'OPERATOR' : 'CUSTOMER',
+          isOperator ? 'Pesanan tiket dibatalkan oleh operator pool & kursi dilepaskan' : 'Pesanan tiket dibatalkan secara mandiri oleh pelanggan (Tiket Saya)',
+          JSON.stringify({ cancelled_by: isOperator ? 'OPERATOR' : 'CUSTOMER', phone: booking.customer_phone })
         ]
       );
     } catch (timelineErr) {
@@ -438,7 +558,7 @@ app.post('/api/bookings/:id/cancel', async (req, res) => {
       [id]
     );
 
-    // Cancellation voice announcement: say no duplicate 'Pool'
+    // Cancellation voice announcement
     const cancelVoiceText = `Perhatian: Pesanan ${updated.booking_code} atas nama ${updated.customer_name} rute ${updated.origin_name} ke ${updated.destination_name} telah dibatalkan.`;
 
     // Broadcast update to Business app so operator, timeline, and schedules auto-refresh
@@ -446,7 +566,7 @@ app.post('/api/bookings/:id/cancel', async (req, res) => {
       type: 'BOOKING_CANCELLED',
       booking: updated,
       voiceText: cancelVoiceText,
-      cancelledBy: 'CUSTOMER',
+      cancelledBy: isOperator ? 'OPERATOR' : 'CUSTOMER',
       timestamp: Date.now()
     });
 
@@ -458,7 +578,7 @@ app.post('/api/bookings/:id/cancel', async (req, res) => {
 });
 
 // 6. BUSINESS: Get all bookings (with filters)
-app.get('/api/business/bookings', async (req, res) => {
+app.get('/api/business/bookings', requireOperator, async (req, res) => {
   try {
     const { date, status, payment_status } = req.query;
     let query = `
@@ -504,7 +624,7 @@ app.get('/api/business/bookings', async (req, res) => {
 });
 
 // 7. BUSINESS: Update booking status (e.g. mark as PAID on arrival, or check-in)
-app.patch('/api/business/bookings/:id/status', async (req, res) => {
+app.patch('/api/business/bookings/:id/status', requireOperator, async (req, res) => {
   try {
     const { id } = req.params;
     const { payment_status, booking_status } = req.body;
@@ -545,6 +665,10 @@ app.patch('/api/business/bookings/:id/status', async (req, res) => {
     } catch (e) {}
 
     const isCancelled = booking_status === 'CANCELLED' || payment_status === 'CANCELLED';
+
+    if (isCancelled) {
+      await dbRun("UPDATE booking_seats SET status = 'CANCELLED' WHERE booking_id = ?", [id]);
+    }
 
     // Log timeline event
     try {
@@ -616,7 +740,7 @@ app.patch('/api/business/bookings/:id/status', async (req, res) => {
 });
 
 // 8. BUSINESS: Schedule Management (List, Add, Update price/time/seats, Delete)
-app.get('/api/business/schedules', async (req, res) => {
+app.get('/api/business/schedules', requireOperator, async (req, res) => {
   try {
     const { date } = req.query;
     const targetDate = date || new Date().toISOString().split('T')[0];
@@ -670,7 +794,7 @@ app.get('/api/business/schedules', async (req, res) => {
   }
 });
 
-app.post('/api/business/schedules', async (req, res) => {
+app.post('/api/business/schedules', requireOperator, async (req, res) => {
   try {
     const {
       origin_spot_id,
@@ -710,7 +834,7 @@ app.post('/api/business/schedules', async (req, res) => {
   }
 });
 
-app.put('/api/business/schedules/:id', async (req, res) => {
+app.put('/api/business/schedules/:id', requireOperator, async (req, res) => {
   try {
     const { id } = req.params;
     const { departure_time, price, total_seats, armada_id, vehicle_model, vehicle_layout, is_active } = req.body;
@@ -737,7 +861,7 @@ app.put('/api/business/schedules/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/business/schedules/:id', async (req, res) => {
+app.delete('/api/business/schedules/:id', requireOperator, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -782,7 +906,7 @@ app.get('/api/armadas', async (req, res) => {
   }
 });
 
-app.post('/api/armadas', async (req, res) => {
+app.post('/api/armadas', requireOperator, async (req, res) => {
   try {
     const { name, license_plate, rows_count, cols_count, layout_json, total_seats } = req.body;
     if (!name || !rows_count || !cols_count || !layout_json) {
@@ -809,7 +933,7 @@ app.post('/api/armadas', async (req, res) => {
   }
 });
 
-app.put('/api/armadas/:id', async (req, res) => {
+app.put('/api/armadas/:id', requireOperator, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, license_plate, rows_count, cols_count, layout_json, total_seats } = req.body;
@@ -850,7 +974,7 @@ app.put('/api/armadas/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/armadas/:id', async (req, res) => {
+app.delete('/api/armadas/:id', requireOperator, async (req, res) => {
   try {
     const { id } = req.params;
     // Check if armada is in use in active schedules
@@ -869,7 +993,7 @@ app.delete('/api/armadas/:id', async (req, res) => {
 });
 
 // 10. BUSINESS: Statistics and Dashboard Analytics
-app.get('/api/business/analytics', async (req, res) => {
+app.get('/api/business/analytics', requireOperator, async (req, res) => {
   try {
     // Total bookings
     const totalBookingsRow = await dbGet("SELECT COUNT(*) as count FROM bookings WHERE booking_status != 'CANCELLED'");
@@ -938,7 +1062,7 @@ app.get('/api/business/analytics', async (req, res) => {
 });
 
 // 12. BUSINESS: Order Timeline Events
-app.get('/api/business/timeline', async (req, res) => {
+app.get('/api/business/timeline', requireOperator, async (req, res) => {
   try {
     const { booking_code, event_type, date } = req.query;
 

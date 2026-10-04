@@ -38,7 +38,54 @@ export const dbAll = (sql, params = []) => {
   });
 };
 
+class AsyncLock {
+  constructor() {
+    this._queue = [];
+    this._locked = false;
+  }
+  async acquire() {
+    if (!this._locked) {
+      this._locked = true;
+      return;
+    }
+    await new Promise((resolve) => this._queue.push(resolve));
+  }
+  release() {
+    if (this._queue.length > 0) {
+      const next = this._queue.shift();
+      next();
+    } else {
+      this._locked = false;
+    }
+  }
+}
+
+const txLock = new AsyncLock();
+
+export async function withTransaction(callback) {
+  await txLock.acquire();
+  try {
+    await dbRun('BEGIN IMMEDIATE');
+    try {
+      const result = await callback();
+      await dbRun('COMMIT');
+      return result;
+    } catch (err) {
+      try { await dbRun('ROLLBACK'); } catch (rbErr) {}
+      throw err;
+    }
+  } finally {
+    txLock.release();
+  }
+}
+
 export async function initDb() {
+  // Optimize SQLite for high concurrency and robust queueing
+  try {
+    await dbRun('PRAGMA journal_mode = WAL');
+    await dbRun('PRAGMA busy_timeout = 10000');
+  } catch (e) {}
+
   // 1. Pooling spots table
   await dbRun(`
     CREATE TABLE IF NOT EXISTS pooling_spots (
@@ -130,6 +177,46 @@ export async function initDb() {
       FOREIGN KEY (booking_id) REFERENCES bookings(id)
     )
   `);
+
+  // 6. Booking Seats table (Atomic Seat Reservations & Collision Prevention)
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS booking_seats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      booking_id INTEGER NOT NULL,
+      schedule_id INTEGER NOT NULL,
+      travel_date TEXT NOT NULL,
+      seat_number TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'CONFIRMED', -- 'CONFIRMED', 'CANCELLED'
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
+    )
+  `);
+
+  await dbRun(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_seat
+    ON booking_seats(schedule_id, travel_date, seat_number)
+    WHERE status != 'CANCELLED'
+  `);
+
+  // Backfill existing bookings into booking_seats if empty
+  const seatsCount = await dbGet('SELECT COUNT(*) as count FROM booking_seats');
+  if (seatsCount && seatsCount.count === 0) {
+    const existingBookings = await dbAll('SELECT id, schedule_id, travel_date, seat_numbers, booking_status FROM bookings');
+    for (const b of existingBookings) {
+      try {
+        const sList = typeof b.seat_numbers === 'string' ? JSON.parse(b.seat_numbers) : b.seat_numbers;
+        if (Array.isArray(sList)) {
+          for (const s of sList) {
+            await dbRun(
+              `INSERT OR IGNORE INTO booking_seats (booking_id, schedule_id, travel_date, seat_number, status)
+               VALUES (?, ?, ?, ?, ?)`,
+              [b.id, b.schedule_id, b.travel_date, s, b.booking_status]
+            );
+          }
+        }
+      } catch (e) {}
+    }
+  }
 
   // Backfill existing bookings into timeline if timeline is empty
   const timelineCount = await dbGet('SELECT COUNT(*) as count FROM order_timeline_events');

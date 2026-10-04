@@ -1,73 +1,69 @@
 # Developer Guide
 
 ## Prerequisites
-- Node.js 18+ (tested on 24), npm 10+
-- A Supabase project (free tier) for Supabase mode, **or** nothing extra for legacy mode
-- Python 3 (only for the legacy integration script)
+- Node.js 18+ (tested on v24), npm 10+
+- A Supabase project (free tier) for the Demo target, **or** zero external dependencies for the Production target
+- Python 3 (optional, for running `server/test_integration.py`)
 
-## Environment variables
+## Environment Variables
 
-Both `client/` and `business/` read Vite env vars from a local `.env` (git-ignored; create it yourself).
+Both `client/` and `business/` read environment variables at startup/build time from their respective `.env` files.
 
-| Variable | App | Purpose |
+| Variable | Target | Purpose |
 |---|---|---|
-| `VITE_SUPABASE_URL` | both | Supabase project URL. With the anon key, enables Supabase mode |
-| `VITE_SUPABASE_ANON_KEY` | both | Supabase anon/public key |
-| `VITE_OPERATOR_USER` | business | Operator username (default `admin`) |
-| `VITE_OPERATOR_PASS` | business | Operator password (default `antarpool2026`) |
-| `VITE_API_URL` | both | Base URL of legacy Express server; empty = same origin (dev proxy to `:5000`) |
+| `VITE_BACKEND` | both | Explicitly set adapter: `'supabase'` or `'rest'` |
+| `VITE_SUPABASE_URL` | demo | Supabase Project URL |
+| `VITE_SUPABASE_ANON_KEY` | demo | Supabase anon/public API key |
+| `VITE_API_URL` | production | Base URL of the Node.js Express server (e.g. `http://localhost:5000` or `https://api.yourdomain.com`) |
+| `VITE_OPERATOR_USER` | demo | Fallback operator username for demo login gate (default: `admin`) |
+| `VITE_OPERATOR_PASS` | demo | Fallback operator password for demo login gate (default: `antarpool2026`) |
+| `JWT_SECRET` | server (env) | Cryptographic secret for signing operator JWT tokens |
+| `OPERATOR_USER` | server (env) | Operator username checked during `POST /api/business/login` |
+| `OPERATOR_PASS` | server (env) | Operator password checked during `POST /api/business/login` |
 
-Template: `deploy/env_templates/supabase.env.example`. The `backend.env.example`, `client.env.example`, `business.env.example` templates are for the abandoned Render/Zeabur legacy deployment.
+Templates:
+- Demo (Supabase): [`deploy/env_templates/demo.env.example`](../deploy/env_templates/demo.env.example)
+- Production (Express REST): [`deploy/env_templates/production.env.example`](../deploy/env_templates/production.env.example)
 
-> [!WARNING]
-> `VITE_*` values are embedded in the public JS bundle. `VITE_OPERATOR_PASS` is therefore **visible to anyone** — see [SECURITY.md](SECURITY.md).
+## Setup & Running
 
-## Setup & run
-
-### Supabase mode
-1. Create a Supabase project, run [`deploy/supabase_schema.sql`](../deploy/supabase_schema.sql) in the SQL editor (creates tables, enables realtime, RLS policies, seeds Surabaya/Malang data).
-2. Create `client/.env` and `business/.env` with the two Supabase vars.
-3. ```bash
-   cd client   && npm install && npm run dev   # http://localhost:5173
-   cd business && npm install && npm run dev   # http://localhost:5174
+### Running the Production Target (Express + REST Server)
+1. Start the server (runs on port 5000 with local SQLite database):
+   ```bash
+   cd server && npm install && npm run dev
    ```
-   The schema script is **not idempotent** for policies/publication (`CREATE POLICY` / `ALTER PUBLICATION ... ADD TABLE` fail on re-run). To reset: drop the tables, then re-run.
+2. In separate terminals, start the passenger and operator apps (they will automatically detect and connect to port 5000):
+   ```bash
+   cd client && npm install && npm run dev      # http://localhost:5173
+   cd business && npm install && npm run dev    # http://localhost:5174
+   ```
+   *(Windows shortcut: double-click `start_all.bat` to launch all three concurrently).*
 
-### Legacy mode (no Supabase vars set)
-```bash
-cd server && npm install && npm run dev        # :5000, creates/seeds travel.db
-cd client && npm install && npm run dev        # proxies /api -> :5000
-cd business && npm install && npm run dev
-```
-`start_all.bat` (Windows) launches all three. Delete `server/travel.db` to reseed. Note that `db.js` seed data and `test_integration.py` are inconsistent (see ROADMAP).
+### Running the Demo Target (Supabase Serverless)
+1. Create a Supabase project and execute [`deploy/supabase_schema.sql`](../deploy/supabase_schema.sql) in the SQL Editor.
+2. In `client/.env` and `business/.env`, set:
+   ```env
+   VITE_BACKEND=supabase
+   VITE_SUPABASE_URL=https://your-project.supabase.co
+   VITE_SUPABASE_ANON_KEY=your-anon-key
+   ```
+3. Run `npm run dev` in `client/` and `business/`.
 
-## Scripts
-| Where | Command | Notes |
-|---|---|---|
-| client / business | `npm run dev` / `build` / `preview` | Vite |
-| client / business | `npm run lint` | oxlint |
-| `deploy/check_ready.bat` | | Builds both apps; run before pushing |
-| `server/` | `npm start` / `npm run dev` | Legacy API |
+## Monorepo Scripts & Testing
 
-There is **no automated test suite** for the frontends.
+The root [`package.json`](../package.json) coordinates all subpackages via npm workspaces:
 
-## Conventions
-- UI language is **Indonesian**; code/identifiers are English. Keep user-facing strings in Indonesian.
-- Money: integer IDR; format with `formatIDR()`. Dates: `YYYY-MM-DD` strings (`travel_date`), times `HH:MM` strings (`departure_time`). No timezone handling – local wall-clock.
-- `is_active` columns are integers `0/1`, not booleans.
-- `seat_numbers` is JSONB (an array); legacy SQLite stores a JSON string – the data layer handles both (`typeof === 'string' → JSON.parse`).
-- Every `api.js` function must keep the dual-mode shape (Supabase branch + fetch fallback) and return the same flattened fields (`origin_name`, `destination_city`, `departure_time`, …) that the UI expects.
-- `utils.js`, `supabase.js` are duplicated between apps; keep them in sync (or extract a shared package).
+| Command | Purpose |
+|---|---|
+| `npm test` | Runs the automated contract and concurrency test suite (`tests/contract.test.js`) |
+| `npm run build` | Builds production bundles for both client and business apps |
+| `npm run lint` | Runs `oxlint` across both client and business apps |
+| `deploy\check_ready.bat` | Verification script that compiles both apps before deployment |
+| `python server/test_integration.py` | Python REST integration test script |
 
-## Common tasks
-- **Add a column:** update `deploy/supabase_schema.sql`, write an `ALTER TABLE` migration for existing projects (none exist yet), update `api.js` in both modes, `server/src/db.js` if legacy matters, and [DATABASE.md](DATABASE.md).
-- **Add an operator tab:** add to the tab list in `business/src/App.jsx`, add API function in `business/src/api.js`, subscribe to realtime if it must stay live.
-- **Change booking rules:** `client/src/api.js → createBooking` (and `server.js POST /api/bookings` for legacy).
-- **New vehicle template:** use the Armada tab (no code needed).
-
-## Known gotchas
-- `Promise.all` per-schedule queries in `getSchedules`/`getBusinessSchedules` cause N+1 requests.
-- Many `catch (e) {}` blocks silently swallow errors (timeline writes, JSON parsing).
-- `business/src/App.jsx` is ~62 KB / single file; consider splitting per tab before adding features.
-- Operator filter semantic: `cancelBooking` sets both `payment_status` and `booking_status` to `CANCELLED`.
-- The status label "Live WebSocket Aktif" is shown in Supabase mode too (it is Supabase Realtime).
+## Architecture & Code Conventions
+- **Language:** UI user-facing strings are in Indonesian; internal variables, comments, and schemas are in English.
+- **Currency & Dates:** Integer IDR for money (formatted with `formatIDR()`); `YYYY-MM-DD` string for travel dates; `HH:MM` for departure times.
+- **Unified Adapter Contracts:** Any new method added to `client/src/api.js` or `business/src/api.js` must be implemented in both `supabaseAdapter.js` and `restAdapter.js`.
+- **Error Handling:** Adapter functions throw descriptive `Error(message)` instances on failure.
+- **Database Concurrency:** All operations that write to bookings and seats on the server must be wrapped in `withTransaction(async () => { ... })` to preserve concurrency guarantees.

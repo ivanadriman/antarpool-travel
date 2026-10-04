@@ -36,7 +36,9 @@ export default function App() {
 
   const handleLogout = () => {
     localStorage.removeItem('antarpool_operator_auth');
+    localStorage.removeItem('antarpool_operator_token');
     sessionStorage.removeItem('antarpool_operator_auth');
+    sessionStorage.removeItem('antarpool_operator_token');
     setOperatorUser(null);
   };
 

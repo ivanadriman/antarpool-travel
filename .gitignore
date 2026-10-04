@@ -8,6 +8,8 @@ dist/
 server/travel.db
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 
 # Local Environment Variables
 .env
