@@ -514,36 +514,37 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans">
+    <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col font-sans overflow-x-hidden w-full max-w-full">
       {/* Top Bar */}
-      <header className="bg-slate-900 text-white sticky top-0 z-30 shadow-md">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold shadow-md shadow-blue-500/20">
-              <Car className="w-5 h-5" />
+      <header className="bg-slate-900 text-white sticky top-0 z-30 shadow-md w-full max-w-full overflow-hidden">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 h-16 flex items-center justify-between gap-2 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-blue-600 flex items-center justify-center font-bold shadow-md shadow-blue-500/20 shrink-0">
+              <Car className="w-5 h-5 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-lg tracking-tight">AntarPool</span>
-                <span className="px-2 py-0.5 rounded-md bg-blue-500/20 border border-blue-400/30 text-blue-300 text-[10px] font-bold uppercase tracking-wider">
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-extrabold text-base sm:text-lg tracking-tight text-white">AntarPool</span>
+                <span className="hidden sm:inline-block px-1.5 py-0.5 rounded-md bg-blue-500/20 border border-blue-400/30 text-blue-300 text-[9px] sm:text-[10px] font-bold uppercase tracking-wider shrink-0">
                   Operator Bisnis
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                <span className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`}></span>
-                <span>{wsConnected ? 'Live WebSocket Aktif' : 'Terputus...'}</span>
+              <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-slate-400 truncate">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${wsConnected ? 'bg-emerald-400 animate-pulse' : 'bg-red-400'}`}></span>
+                <span className="truncate">{wsConnected ? 'Live WebSocket' : 'Terputus...'}</span>
               </div>
             </div>
           </div>
 
           {/* Voice Notification Controls & Operator Session */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             <button
               onClick={handleTestVoice}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-slate-200 transition flex items-center gap-1.5 cursor-pointer shrink-0"
+              title="Uji Notifikasi Suara"
             >
-              <Volume2 className="w-3.5 h-3.5 text-blue-400" />
-              <span className="hidden sm:inline">Uji Notifikasi Suara</span>
+              <Volume2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-blue-400" />
+              <span className="hidden md:inline">Uji Notifikasi</span>
             </button>
 
             <button
@@ -551,21 +552,22 @@ export default function App() {
                 setVoiceEnabled(!voiceEnabled);
                 if (!audioUnlocked) setAudioUnlocked(true);
               }}
-              className={`p-2 sm:px-3 sm:py-1.5 rounded-xl border text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer ${
+              className={`p-2 sm:px-3 sm:py-1.5 rounded-xl border text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shrink-0 ${
                 voiceEnabled
                   ? 'bg-emerald-600/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/30'
                   : 'bg-red-600/20 border-red-500/40 text-red-300 hover:bg-red-600/30'
               }`}
+              title={voiceEnabled ? 'Suara aktif' : 'Suara dibisukan'}
             >
               {voiceEnabled ? (
                 <>
                   <Volume2 className="w-4 h-4 text-emerald-400" />
-                  <span className="hidden sm:inline">Suara: Aktif</span>
+                  <span className="hidden md:inline">Suara: Aktif</span>
                 </>
               ) : (
                 <>
                   <VolumeX className="w-4 h-4 text-red-400" />
-                  <span className="hidden sm:inline">Suara: Bisukan</span>
+                  <span className="hidden md:inline">Suara: Bisukan</span>
                 </>
               )}
             </button>
@@ -573,20 +575,20 @@ export default function App() {
             {/* Logout button */}
             <button
               onClick={handleLogout}
-              className="px-3 py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-xs font-semibold text-red-300 transition flex items-center gap-1.5 cursor-pointer"
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-red-950/40 hover:bg-red-900/60 border border-red-800/40 text-xs font-semibold text-red-300 transition flex items-center gap-1.5 cursor-pointer shrink-0"
               title="Keluar dari sesi operator"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Keluar</span>
+              <LogOut className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+              <span className="hidden md:inline">Keluar</span>
             </button>
           </div>
         </div>
 
         {/* Tab Navigation */}
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex gap-6 text-sm font-semibold border-t border-slate-800 overflow-x-auto">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 flex gap-3 sm:gap-6 text-xs sm:text-sm font-semibold border-t border-slate-800 overflow-x-auto no-scrollbar w-full">
           <button
             onClick={() => setActiveTab('orders')}
-            className={`py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 cursor-pointer ${
+            className={`py-3 sm:py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 whitespace-nowrap cursor-pointer ${
               activeTab === 'orders'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -595,13 +597,13 @@ export default function App() {
             <Bell className="w-4 h-4" />
             <span>Pesanan Masuk</span>
             {newOrderIds.size > 0 && (
-              <span className="px-2 py-0.5 text-xs rounded-full bg-emerald-500 text-white font-black shadow-xs animate-pulse flex items-center gap-1">
+              <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-emerald-500 text-white font-black shadow-xs animate-pulse flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
-                +{newOrderIds.size} Baru
+                +{newOrderIds.size}
               </span>
             )}
             {bookings.length > 0 && (
-              <span className="px-2 py-0.5 text-xs rounded-full bg-blue-600 text-white font-bold">
+              <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-blue-600 text-white font-bold">
                 {bookings.length}
               </span>
             )}
@@ -609,7 +611,7 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('schedules')}
-            className={`py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 cursor-pointer ${
+            className={`py-3 sm:py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 whitespace-nowrap cursor-pointer ${
               activeTab === 'schedules'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -622,7 +624,7 @@ export default function App() {
           {/* TAB: ARMADA */}
           <button
             onClick={() => setActiveTab('armadas')}
-            className={`py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 cursor-pointer ${
+            className={`py-3 sm:py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 whitespace-nowrap cursor-pointer ${
               activeTab === 'armadas'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -631,7 +633,7 @@ export default function App() {
             <Car className="w-4 h-4" />
             <span>Manajemen Armada</span>
             {armadas.length > 0 && (
-              <span className="px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300 font-bold border border-slate-700">
+              <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-slate-800 text-slate-300 font-bold border border-slate-700">
                 {armadas.length}
               </span>
             )}
@@ -640,7 +642,7 @@ export default function App() {
           {/* TAB: PELANGGAN (USERS CRM) */}
           <button
             onClick={() => setActiveTab('customers')}
-            className={`py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 cursor-pointer ${
+            className={`py-3 sm:py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 whitespace-nowrap cursor-pointer ${
               activeTab === 'customers'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
@@ -649,7 +651,7 @@ export default function App() {
             <Users className="w-4 h-4" />
             <span>Pelanggan</span>
             {customers.length > 0 && (
-              <span className="px-2 py-0.5 text-xs rounded-full bg-blue-600/80 text-white font-bold">
+              <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-blue-600/80 text-white font-bold">
                 {customers.length}
               </span>
             )}
@@ -658,16 +660,16 @@ export default function App() {
           {/* TAB: TIMELINE DAN ALUR WAKTU PESANAN */}
           <button
             onClick={() => setActiveTab('timeline')}
-            className={`py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 cursor-pointer ${
+            className={`py-3 sm:py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 whitespace-nowrap cursor-pointer ${
               activeTab === 'timeline'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <History className="w-4 h-4" />
-            <span>Timeline dan Alur Waktu Pesanan</span>
+            <span>Timeline</span>
             {timelineEvents.length > 0 && (
-              <span className="px-2 py-0.5 text-xs rounded-full bg-indigo-600/80 text-white font-bold">
+              <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-indigo-600/80 text-white font-bold">
                 {timelineEvents.length}
               </span>
             )}
@@ -675,20 +677,20 @@ export default function App() {
 
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 cursor-pointer ${
+            className={`py-3 sm:py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 whitespace-nowrap cursor-pointer ${
               activeTab === 'analytics'
                 ? 'border-blue-500 text-blue-400'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
             <TrendingUp className="w-4 h-4" />
-            <span>Statistik & Laporan</span>
+            <span>Statistik</span>
           </button>
         </div>
       </header>
 
       {/* Floating Notification / Toast Container (Fixed overlay - Does not push layout/table down) */}
-      <div className="fixed top-4 right-4 sm:top-5 sm:right-6 z-50 flex flex-col gap-2.5 max-w-md w-full pointer-events-none">
+      <div className="fixed top-4 right-3 left-3 sm:left-auto sm:right-6 z-50 flex flex-col gap-2.5 max-w-md pointer-events-none">
         {/* App Alert Banner (Error / Warning / Success) */}
         {appAlert && (
           <div
@@ -1268,76 +1270,76 @@ export default function App() {
 
         {/* ================= TAB: MANAJEMEN PELANGGAN (CRM) ================= */}
         {activeTab === 'customers' && (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6 min-w-0 max-w-full">
             {/* Top Header & Overview KPI Cards */}
             <div>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 sm:mb-4">
                 <div>
-                  <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-                    <Users className="w-5 h-5 text-blue-400" />
-                    Direktori & Manajemen Pelanggan
+                  <h3 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-blue-600 shrink-0" />
+                    <span>Direktori & Manajemen Pelanggan</span>
                   </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">
+                  <p className="text-xs text-slate-500 mt-0.5">
                     Kelola data penumpang, riwayat perjalanan, status VIP, no-show/blacklist, dan hubungi via WhatsApp langsung.
                   </p>
                 </div>
                 <button
                   onClick={fetchCustomers}
-                  className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-2 transition cursor-pointer self-start sm:self-auto"
+                  className="px-3.5 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-xs font-semibold text-slate-700 shadow-xs flex items-center gap-2 transition cursor-pointer self-start sm:self-auto shrink-0"
                 >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loadingCustomers ? 'animate-spin text-blue-400' : ''}`} />
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingCustomers ? 'animate-spin text-blue-600' : 'text-slate-500'}`} />
                   <span>Segarkan Data</span>
                 </button>
               </div>
 
               {/* CRM KPI Cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 min-w-0 max-w-full">
+                <div className="bg-white border border-slate-200 p-3.5 sm:p-4 rounded-2xl shadow-xs min-w-0 overflow-hidden">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-500 uppercase tracking-wider block truncate">
                     Total Pelanggan
                   </span>
-                  <p className="text-2xl font-black text-white mt-1">
+                  <p className="text-xl sm:text-2xl font-black text-slate-800 mt-1">
                     {customers.length}
                   </p>
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 block truncate">
                     Penumpang terdaftar
                   </span>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
-                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                    Pelanggan VIP
+                <div className="bg-white border border-slate-200 p-3.5 sm:p-4 rounded-2xl shadow-xs min-w-0 overflow-hidden">
+                  <span className="text-[11px] sm:text-xs font-bold text-amber-600 uppercase tracking-wider block flex items-center gap-1 truncate">
+                    <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500 shrink-0" />
+                    <span>Pelanggan VIP</span>
                   </span>
-                  <p className="text-2xl font-black text-amber-400 mt-1">
+                  <p className="text-xl sm:text-2xl font-black text-amber-500 mt-1">
                     {customers.filter((c) => c.is_vip).length}
                   </p>
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 block truncate">
                     Prioritas layanan istimewa
                   </span>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-                    Total Omzet Pelanggan (LTV)
+                <div className="bg-white border border-slate-200 p-3.5 sm:p-4 rounded-2xl shadow-xs min-w-0 overflow-hidden">
+                  <span className="text-[11px] sm:text-xs font-bold text-emerald-600 uppercase tracking-wider block truncate">
+                    Total Omzet (LTV)
                   </span>
-                  <p className="text-xl sm:text-2xl font-black text-emerald-400 mt-1 truncate">
+                  <p className="text-lg sm:text-2xl font-black text-emerald-600 mt-1 truncate">
                     {formatIDR(customers.reduce((acc, c) => acc + (Number(c.total_spent) || 0), 0))}
                   </p>
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 block truncate">
                     Akumulasi transaksi selesai
                   </span>
                 </div>
 
-                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
-                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
-                    <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
-                    No-Show / Terblokir
+                <div className="bg-white border border-slate-200 p-3.5 sm:p-4 rounded-2xl shadow-xs min-w-0 overflow-hidden">
+                  <span className="text-[11px] sm:text-xs font-bold text-red-600 uppercase tracking-wider block flex items-center gap-1 truncate">
+                    <ShieldAlert className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                    <span>No-Show / Terblokir</span>
                   </span>
-                  <p className="text-2xl font-black text-red-400 mt-1">
+                  <p className="text-xl sm:text-2xl font-black text-red-600 mt-1">
                     {customers.filter((c) => c.is_blacklisted).length}
                   </p>
-                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                  <span className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 block truncate">
                     Peringatan dispatcher
                   </span>
                 </div>
@@ -1345,71 +1347,71 @@ export default function App() {
             </div>
 
             {/* Filter Toolbar */}
-            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="bg-white border border-slate-200 p-3 sm:p-4 rounded-2xl shadow-xs flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 min-w-0 max-w-full">
               {/* Search Bar */}
-              <div className="relative w-full md:w-96">
+              <div className="relative w-full md:w-96 min-w-0">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type="text"
                   placeholder="Cari nama, WhatsApp/HP, atau email..."
                   value={customerSearch}
                   onChange={(e) => setCustomerSearch(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:outline-hidden focus:border-blue-500 text-xs text-slate-200 placeholder-slate-500"
+                  className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-300 focus:outline-hidden focus:border-blue-500 focus:bg-white text-xs text-slate-800 placeholder-slate-400"
                 />
               </div>
 
               {/* Segment Filter Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
+              <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar w-full md:w-auto min-w-0 py-0.5">
                 <button
                   onClick={() => setCustomerFilter('all')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 whitespace-nowrap ${
                     customerFilter === 'all'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
                   }`}
                 >
                   Semua ({customers.length})
                 </button>
                 <button
                   onClick={() => setCustomerFilter('vip')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 flex items-center gap-1 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 whitespace-nowrap flex items-center gap-1 ${
                     customerFilter === 'vip'
-                      ? 'bg-amber-600 text-white'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      ? 'bg-amber-500 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
                   }`}
                 >
-                  <Star className="w-3.5 h-3.5 fill-current" />
-                  VIP Saja ({customers.filter((c) => c.is_vip).length})
+                  <Star className="w-3 h-3 fill-current" />
+                  <span>VIP Saja ({customers.filter((c) => c.is_vip).length})</span>
                 </button>
                 <button
                   onClick={() => setCustomerFilter('cancelled')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 whitespace-nowrap ${
                     customerFilter === 'cancelled'
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      ? 'bg-purple-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
                   }`}
                 >
                   Pernah Batal ({customers.filter((c) => (c.cancelled_trips || 0) > 0).length})
                 </button>
                 <button
                   onClick={() => setCustomerFilter('blacklisted')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 flex items-center gap-1 ${
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 whitespace-nowrap flex items-center gap-1 ${
                     customerFilter === 'blacklisted'
-                      ? 'bg-red-600 text-white'
-                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                      ? 'bg-red-600 text-white shadow-xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
                   }`}
                 >
-                  <ShieldAlert className="w-3.5 h-3.5" />
-                  Terblokir ({customers.filter((c) => c.is_blacklisted).length})
+                  <ShieldAlert className="w-3 h-3" />
+                  <span>Terblokir ({customers.filter((c) => c.is_blacklisted).length})</span>
                 </button>
               </div>
             </div>
 
             {/* Customer List / Cards */}
             {loadingCustomers ? (
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 flex flex-col items-center gap-3">
-                <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
-                <span className="text-sm font-semibold">Memuat data pelanggan...</span>
+              <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 flex flex-col items-center gap-3 shadow-xs">
+                <RefreshCw className="w-8 h-8 animate-spin text-blue-600" />
+                <span className="text-sm font-semibold text-slate-700">Memuat data pelanggan...</span>
               </div>
             ) : (() => {
               const filtered = customers.filter((c) => {
@@ -1430,16 +1432,16 @@ export default function App() {
 
               if (filtered.length === 0) {
                 return (
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400">
-                    <Users className="w-10 h-10 text-slate-600 mx-auto mb-2" />
-                    <p className="text-sm font-bold text-slate-300">Tidak ada pelanggan yang cocok dengan pencarian.</p>
+                  <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center text-slate-500 shadow-xs">
+                    <Users className="w-10 h-10 text-slate-400 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-800">Tidak ada pelanggan yang cocok dengan pencarian.</p>
                     <p className="text-xs text-slate-500 mt-1">Coba gunakan kata kunci pencarian atau filter yang berbeda.</p>
                   </div>
                 );
               }
 
               return (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 min-w-0 max-w-full">
                   {filtered.map((c) => {
                     const initials = c.name
                       ? c.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
@@ -1453,52 +1455,52 @@ export default function App() {
                     return (
                       <div
                         key={c.id || c.phone}
-                        className={`bg-slate-900 border rounded-2xl p-5 flex flex-col justify-between transition hover:border-slate-700 shadow-xs ${
+                        className={`bg-white border rounded-2xl p-4 sm:p-5 flex flex-col justify-between transition hover:border-slate-300 shadow-xs min-w-0 ${
                           c.is_blacklisted 
-                            ? 'border-red-900/60 bg-red-950/10' 
+                            ? 'border-red-300 bg-red-50/20' 
                             : c.is_vip 
-                              ? 'border-amber-900/60 bg-amber-950/10' 
-                              : 'border-slate-800'
+                              ? 'border-amber-300 bg-amber-50/20' 
+                              : 'border-slate-200'
                         }`}
                       >
                         <div>
                           {/* Card Header */}
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
+                          <div className="flex items-start justify-between gap-2.5">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
                                 c.is_blacklisted
-                                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                  ? 'bg-red-100 text-red-700 border border-red-200'
                                   : c.is_vip
-                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-xs shadow-amber-500/20'
-                                    : 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-200 shadow-xs'
+                                    : 'bg-blue-100 text-blue-700 border border-blue-200'
                               }`}>
                                 {initials}
                               </div>
-                              <div>
-                                <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
-                                  <span>{c.name}</span>
+                              <div className="min-w-0">
+                                <h4 className="text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5 truncate">
+                                  <span className="truncate">{c.name}</span>
                                   {c.is_vip ? (
-                                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" title="Pelanggan VIP" />
+                                    <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" title="Pelanggan VIP" />
                                   ) : null}
                                 </h4>
-                                <span className="text-xs text-slate-400 block mt-0.5">
+                                <span className="text-xs text-slate-500 block mt-0.5 truncate">
                                   {c.phone || 'Tanpa nomor HP'}
                                 </span>
                               </div>
                             </div>
 
                             {/* Status Pill */}
-                            <div>
+                            <div className="shrink-0">
                               {c.is_blacklisted ? (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800/60">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700 border border-red-200">
                                   No-Show
                                 </span>
                               ) : c.is_vip ? (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-400 border border-amber-800/60">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
                                   VIP
                                 </span>
                               ) : (
-                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-950/80 text-blue-400 border border-blue-800/60">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
                                   Aktif
                                 </span>
                               )}
@@ -1506,19 +1508,19 @@ export default function App() {
                           </div>
 
                           {/* Quick Stats Grid */}
-                          <div className="grid grid-cols-2 gap-2 mt-4 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs">
+                          <div className="grid grid-cols-2 gap-2 mt-3.5 p-3 rounded-xl bg-slate-50 border border-slate-100 text-xs">
                             <div>
                               <span className="text-[11px] text-slate-500 block">Total Pesanan</span>
-                              <span className="font-bold text-slate-200 mt-0.5 block">
+                              <span className="font-bold text-slate-800 mt-0.5 block truncate">
                                 {c.total_trips || 0} trip
                                 {c.cancelled_trips > 0 ? (
-                                  <span className="text-red-400 text-[10px] ml-1">({c.cancelled_trips} batal)</span>
+                                  <span className="text-red-500 text-[10px] ml-1">({c.cancelled_trips} batal)</span>
                                 ) : null}
                               </span>
                             </div>
                             <div>
                               <span className="text-[11px] text-slate-500 block">Total Transaksi</span>
-                              <span className="font-bold text-emerald-400 mt-0.5 block truncate">
+                              <span className="font-bold text-emerald-600 mt-0.5 block truncate">
                                 {formatIDR(c.total_spent || 0)}
                               </span>
                             </div>
@@ -1526,26 +1528,26 @@ export default function App() {
 
                           {/* Notes snippet if exists */}
                           {c.notes && (
-                            <div className="mt-3 p-2.5 rounded-xl bg-slate-950/40 border border-slate-800 text-[11px] text-slate-300 flex items-start gap-1.5">
-                              <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                            <div className="mt-3 p-2.5 rounded-xl bg-amber-50/70 border border-amber-200/70 text-[11px] text-slate-700 flex items-start gap-1.5">
+                              <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                               <span className="line-clamp-2">{c.notes}</span>
                             </div>
                           )}
                         </div>
 
                         {/* Card Footer Actions */}
-                        <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-4">
+                        <div className="pt-3.5 border-t border-slate-100 flex items-center justify-between gap-2 mt-4">
                           {waLink ? (
                             <a
                               href={waLink}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition"
+                              className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-700 text-xs font-semibold flex items-center gap-1.5 transition"
                               title="Kirim pesan WhatsApp"
                             >
-                              <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
                               <span>WhatsApp</span>
-                              <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                              <ExternalLink className="w-2.5 h-2.5 opacity-60" />
                             </a>
                           ) : (
                             <div />
@@ -1556,7 +1558,7 @@ export default function App() {
                               setSelectedCustomer(c);
                               setCustomerModalOpen(true);
                             }}
-                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
                           >
                             <span>Kelola & Riwayat</span>
                             <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
