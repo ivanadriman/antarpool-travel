@@ -17,7 +17,8 @@ import {
   Save,
   Loader2,
   ExternalLink,
-  Info
+  Info,
+  Check
 } from 'lucide-react';
 import { formatIDR, formatIndonesianDate } from '../utils';
 import { getCustomerBookings, updateCustomer } from '../api';
@@ -114,7 +115,7 @@ export default function CustomerModal({
             notes: notes.trim()
           }, res);
         }
-        setTimeout(() => setSaveSuccess(false), 6000);
+        setTimeout(() => setSaveSuccess(false), 8000);
       }
     } catch (err) {
       console.error('Failed to update customer:', err);
@@ -359,20 +360,57 @@ export default function CustomerModal({
               />
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+              <div className="flex-1 min-w-0">
+                {saveSuccess ? (
+                  <div className={`p-2.5 sm:p-3 rounded-xl border text-xs flex items-center gap-2 animate-in fade-in zoom-in duration-200 ${
+                    isFallbackSave 
+                      ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs' 
+                      : 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-2xs'
+                  }`}>
+                    {isFallbackSave ? (
+                      <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                    ) : (
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                    )}
+                    <span className="font-bold truncate">{saveNotice}</span>
+                  </div>
+                ) : errorMessage ? (
+                  <div className="p-2.5 rounded-xl bg-red-50 border border-red-200 text-xs text-red-700 flex items-center gap-2 animate-in fade-in">
+                    <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                    <span className="truncate">{errorMessage}</span>
+                  </div>
+                ) : (
+                  <span className="text-[11px] text-slate-400">
+                    Perubahan status akan segera aktif pada sistem dispatcher.
+                  </span>
+                )}
+              </div>
+
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition disabled:opacity-50 cursor-pointer"
+                className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-sm transition disabled:opacity-50 cursor-pointer shrink-0 ${
+                  saveSuccess
+                    ? isFallbackSave
+                      ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/30'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30'
+                    : 'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white shadow-blue-600/30'
+                }`}
               >
                 {saving ? (
                   <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     <span>Menyimpan...</span>
+                  </>
+                ) : saveSuccess ? (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>{isFallbackSave ? 'Tersimpan (Lokal)!' : 'Tersimpan ke Cloud!'}</span>
                   </>
                 ) : (
                   <>
-                    <Save className="w-3.5 h-3.5" />
+                    <Save className="w-4 h-4" />
                     <span>Simpan Perubahan</span>
                   </>
                 )}

@@ -721,7 +721,7 @@ export default function App() {
       </header>
 
       {/* Floating Notification / Toast Container (Fixed overlay - Does not push layout/table down) */}
-      <div className="fixed top-4 right-3 left-3 sm:left-auto sm:right-6 z-50 flex flex-col gap-2.5 max-w-md pointer-events-none">
+      <div className="fixed top-4 right-3 left-3 sm:left-auto sm:right-6 z-[70] flex flex-col gap-2.5 max-w-md pointer-events-none">
         {/* App Alert Banner (Error / Warning / Success) */}
         {appAlert && (
           <div
