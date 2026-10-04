@@ -161,7 +161,12 @@ export async function getCustomers() {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'Gagal memuat data pelanggan');
   }
-  return res.json();
+  const data = await res.json();
+  if (Array.isArray(data)) {
+    data._source = 'rest';
+    data._isFallback = false;
+  }
+  return data;
 }
 
 // 13. Fetch single customer booking history
@@ -185,6 +190,11 @@ export async function updateCustomer(id, customerData) {
   if (!res.ok) {
     throw new Error(data.error || 'Gagal memperbarui data pelanggan');
   }
-  return data;
+  return {
+    ...data,
+    source: 'rest',
+    isFallback: false,
+    notice: 'Perubahan profil pelanggan berhasil disimpan ke database SQLite server!'
+  };
 }
 

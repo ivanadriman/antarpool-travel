@@ -16,7 +16,8 @@ import {
   AlertTriangle,
   Save,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  Info
 } from 'lucide-react';
 import { formatIDR, formatIndonesianDate } from '../utils';
 import { getCustomerBookings, updateCustomer } from '../api';
@@ -34,6 +35,8 @@ export default function CustomerModal({
   const [loadingBookings, setLoadingBookings] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveNotice, setSaveNotice] = useState('');
+  const [isFallbackSave, setIsFallbackSave] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
@@ -88,22 +91,30 @@ export default function CustomerModal({
       const res = await updateCustomer(customer.id, {
         is_vip: isVip,
         is_blacklisted: isBlacklisted,
-        notes: notes.trim()
+        notes: notes.trim(),
+        phone: customer.phone
       });
 
       if (res && res.success === false) {
         setErrorMessage(res.error || 'Gagal menyimpan perubahan');
       } else {
         setSaveSuccess(true);
+        setIsFallbackSave(Boolean(res?.isFallback));
+        setSaveNotice(
+          res?.notice ||
+          (res?.isFallback
+            ? 'Perubahan berhasil disimpan di memori browser (Mode Fallback: tabel customers di Supabase belum dibuat).'
+            : 'Perubahan profil & catatan pelanggan berhasil disimpan ke database cloud Supabase!')
+        );
         if (onCustomerUpdated) {
           onCustomerUpdated({
             ...customer,
             is_vip: isVip,
             is_blacklisted: isBlacklisted,
             notes: notes.trim()
-          });
+          }, res);
         }
-        setTimeout(() => setSaveSuccess(false), 3000);
+        setTimeout(() => setSaveSuccess(false), 6000);
       }
     } catch (err) {
       console.error('Failed to update customer:', err);
@@ -262,9 +273,27 @@ export default function CustomerModal({
             )}
 
             {saveSuccess && (
-              <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-700 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600" />
-                <span>Perubahan profil pelanggan berhasil disimpan.</span>
+              <div className={`p-3.5 rounded-xl border text-xs flex items-start gap-2.5 animate-in fade-in duration-200 ${
+                isFallbackSave
+                  ? 'bg-amber-50 border-amber-300 text-amber-900 shadow-2xs'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-900 shadow-2xs'
+              }`}>
+                {isFallbackSave ? (
+                  <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
+                ) : (
+                  <CheckCircle className="w-4 h-4 shrink-0 text-emerald-600 mt-0.5" />
+                )}
+                <div className="flex-1">
+                  <span className="font-bold block">
+                    {isFallbackSave ? 'Pemberitahuan Simpan (Mode Fallback)' : 'Pemberitahuan: Berhasil Disimpan'}
+                  </span>
+                  <span className="mt-0.5 block opacity-90 leading-relaxed">{saveNotice}</span>
+                  {isFallbackSave && (
+                    <span className="block mt-1 text-[11px] text-amber-800 font-medium">
+                      💡 Status VIP & catatan tersimpan di browser Anda. Jalankan script SQL di Supabase SQL Editor agar tersimpan permanen di cloud untuk semua operator.
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 

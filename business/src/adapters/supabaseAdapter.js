@@ -342,15 +342,40 @@ export async function getAnalytics() {
   };
 }
 
+const CUSTOMER_OVERRIDES_KEY = 'antarpool_customer_overrides';
+
+function getLocalCustomerOverrides() {
+  try {
+    const raw = localStorage.getItem(CUSTOMER_OVERRIDES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function setLocalCustomerOverrides(overrides) {
+  try {
+    localStorage.setItem(CUSTOMER_OVERRIDES_KEY, JSON.stringify(overrides));
+  } catch (e) {}
+}
+
 // 12. Fetch customers directory (CRM)
 export async function getCustomers() {
   if (!supabase) return [];
 
   // Try fetching from customers table
-  const { data: dbCustomers } = await supabase
-    .from('customers')
-    .select('*')
-    .order('is_vip', { ascending: false });
+  let dbCustomers = null;
+  let custError = null;
+  try {
+    const res = await supabase
+      .from('customers')
+      .select('*')
+      .order('is_vip', { ascending: false });
+    dbCustomers = res.data;
+    custError = res.error;
+  } catch (err) {
+    custError = err;
+  }
 
   // Also fetch bookings to calculate aggregate metrics
   const { data: bookings } = await supabase
@@ -366,9 +391,11 @@ export async function getCustomers() {
     bookingsByPhone[b.customer_phone].push(b);
   });
 
-  // If customers table has data, enrich it
-  if (dbCustomers && dbCustomers.length > 0) {
-    return dbCustomers.map((c) => {
+  const localOverrides = getLocalCustomerOverrides();
+
+  // If customers table has data and no table error, enrich it
+  if (dbCustomers && dbCustomers.length > 0 && !custError) {
+    const enriched = dbCustomers.map((c) => {
       const cBookings = bookingsByPhone[c.phone] || [];
       const total_trips = cBookings.length;
       const completed_trips = cBookings.filter((b) => b.booking_status !== 'CANCELLED').length;
@@ -387,9 +414,13 @@ export async function getCustomers() {
         last_travel_date
       };
     });
+
+    enriched._source = 'supabase';
+    enriched._isFallback = false;
+    return enriched;
   }
 
-  // Fallback: If customers table is empty, derive from bookings
+  // Fallback: If customers table is missing or empty, derive from bookings
   const derived = Object.entries(bookingsByPhone).map(([phone, bList], index) => {
     const first = bList[0];
     const total_trips = bList.length;
@@ -400,15 +431,17 @@ export async function getCustomers() {
       .reduce((sum, b) => sum + (Number(b.total_price) || 0), 0);
     const last_travel_date = bList.reduce((max, b) => (!max || b.travel_date > max ? b.travel_date : max), null);
 
+    const override = localOverrides[phone] || {};
+
     return {
       id: index + 1,
       phone,
       name: first.customer_name || 'Pelanggan',
       email: first.customer_email || '',
       auth_method: first.auth_method || 'phone',
-      is_vip: false,
-      is_blacklisted: false,
-      notes: '',
+      is_vip: override.is_vip !== undefined ? Boolean(override.is_vip) : false,
+      is_blacklisted: override.is_blacklisted !== undefined ? Boolean(override.is_blacklisted) : false,
+      notes: override.notes !== undefined ? override.notes : '',
       total_trips,
       completed_trips,
       cancelled_trips,
@@ -418,6 +451,9 @@ export async function getCustomers() {
     };
   });
 
+  derived._source = 'fallback';
+  derived._isFallback = true;
+  derived._error = custError?.message || (dbCustomers?.length === 0 ? 'Tabel customers kosong' : 'Tabel customers belum dibuat di Supabase');
   return derived;
 }
 
@@ -459,21 +495,83 @@ export async function getCustomerBookings(phone) {
 export async function updateCustomer(id, customerData) {
   if (!supabase) return { success: false, error: 'Supabase client not initialized' };
 
-  const { data, error } = await supabase
-    .from('customers')
-    .update({
-      ...customerData,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', id)
-    .select()
-    .single();
+  const phone = customerData.phone;
+  let supabaseSuccess = false;
+  let supabaseData = null;
+  let errorMsg = null;
 
-  if (error) {
-    console.error('Error updating customer in Supabase:', error);
-    return { success: false, error: error.message };
+  // 1. Try updating in Supabase cloud customers table
+  try {
+    let query = supabase.from('customers').update({
+      is_vip: Boolean(customerData.is_vip),
+      is_blacklisted: Boolean(customerData.is_blacklisted),
+      notes: (customerData.notes || '').trim(),
+      updated_at: new Date().toISOString()
+    });
+
+    if (id && typeof id === 'number' && id > 1000) {
+      query = query.eq('id', id);
+    } else if (id && typeof id === 'string') {
+      query = query.eq('id', id);
+    } else if (phone) {
+      query = query.eq('phone', phone);
+    } else {
+      query = query.eq('id', id);
+    }
+
+    const { data, error } = await query.select().single();
+    if (!error && data) {
+      supabaseSuccess = true;
+      supabaseData = data;
+      // Clean up local fallback override for this phone since it's now saved to Supabase
+      if (phone) {
+        const overrides = getLocalCustomerOverrides();
+        delete overrides[phone];
+        setLocalCustomerOverrides(overrides);
+      }
+    } else {
+      errorMsg = error?.message;
+    }
+  } catch (err) {
+    errorMsg = err.message;
   }
 
-  return { success: true, customer: data };
+  if (supabaseSuccess) {
+    return {
+      success: true,
+      source: 'supabase',
+      isFallback: false,
+      customer: supabaseData,
+      notice: 'Perubahan profil & catatan pelanggan berhasil disimpan ke database cloud Supabase!'
+    };
+  }
+
+  // 2. Fallback: If customers table does not exist or row missing, persist to browser localStorage
+  if (phone) {
+    const overrides = getLocalCustomerOverrides();
+    overrides[phone] = {
+      is_vip: Boolean(customerData.is_vip),
+      is_blacklisted: Boolean(customerData.is_blacklisted),
+      notes: (customerData.notes || '').trim(),
+      updated_at: new Date().toISOString()
+    };
+    setLocalCustomerOverrides(overrides);
+
+    return {
+      success: true,
+      source: 'fallback',
+      isFallback: true,
+      customer: {
+        id,
+        phone,
+        is_vip: Boolean(customerData.is_vip),
+        is_blacklisted: Boolean(customerData.is_blacklisted),
+        notes: (customerData.notes || '').trim()
+      },
+      notice: 'Perubahan berhasil disimpan di memori browser (Mode Fallback: tabel customers di Supabase belum dibuat).'
+    };
+  }
+
+  return { success: false, error: errorMsg || 'Gagal memperbarui data pelanggan' };
 }
 
