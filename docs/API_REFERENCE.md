@@ -26,6 +26,9 @@ The frontend applications access data through unified adapter interfaces (`clien
 | `deleteArmada(...)` | `(armadaId)` | `Promise<{ success: true }>` | Deletes fleet vehicle (Protected) |
 | `getTimeline()` | None | `Promise<TimelineEvent[]>` | Retrieves real-time audit trail events (Protected) |
 | `getAnalytics()` | None | `Promise<AnalyticsSummary>` | Summary statistics and top routes (Protected) |
+| `getCustomers()` | None | `Promise<Customer[]>` | Retrieves customer directory with enriched CRM stats (Protected) |
+| `getCustomerBookings(...)` | `(phone)` | `Promise<Booking[]>` | Retrieves full ticket booking history for a customer (Protected) |
+| `updateCustomer(...)` | `(id, customerData)` | `Promise<{ success: true, customer: Customer }>` | Updates customer VIP status, blacklist flag, and notes (Protected) |
 
 ---
 
@@ -93,6 +96,9 @@ Search bookings by phone or code.
 - **`POST /api/armadas`** / **`PUT /api/armadas/:id`** / **`DELETE /api/armadas/:id`** – Fleet management (updates automatically sync to linked schedules).
 - **`GET /api/business/analytics`** – Revenue, booking counts, top routes.
 - **`GET /api/business/timeline`** – Order life-cycle audit trail.
+- **`GET /api/business/customers`** – Customer CRM directory with aggregated trips, completed/cancelled counts, and total spend.
+- **`GET /api/business/customers/:phone/bookings`** – Full booking history for a specific customer phone number.
+- **`PUT /api/business/customers/:id`** – Update customer VIP status (`is_vip`), blacklist flag (`is_blacklisted`), and operator notes (`notes`).
 
 ---
 

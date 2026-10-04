@@ -19,3 +19,6 @@ export function formatDateID(dateStr) {
     day: 'numeric'
   });
 }
+
+export const formatIndonesianDate = formatDateID;
+

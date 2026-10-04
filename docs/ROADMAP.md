@@ -15,6 +15,7 @@ The following core gaps were resolved in the hardening phase:
 - [x] **Armada Fleet Layout Synchronization:** Updating an armada automatically syncs layout, model, and seat count across all linked schedules in both Express and Supabase business adapters.
 - [x] **Contract & Concurrency Test Suite:** Integrated Node.js test runner (`tests/contract.test.js`) testing schedule listings, booking validation, concurrency races, cancellation seat release, armada sync, and auth gates.
 - [x] **Architectural Documentation Suite:** Created `docs/` containing `ARCHITECTURE.md`, `DEVELOPMENT.md`, `DATABASE.md`, `API_REFERENCE.md`, `SECURITY.md`, `DEPLOYMENT.md`, `TESTING.md`, `DECISIONS.md`, and `USER_GUIDE.md`.
+- [x] **Client App Users Management (Pelanggan CRM):** Dedicated CRM tab in Business App with passenger search, auth method badges, KPI cards, VIP tagging, blacklist / no-show flags, operator notes, 1-click WhatsApp direct chat link, and booking history modal. Supported in both REST (SQLite) and Supabase adapters.
 
 ---
 

@@ -341,3 +341,139 @@ export async function getAnalytics() {
     time_distribution: timeDist
   };
 }
+
+// 12. Fetch customers directory (CRM)
+export async function getCustomers() {
+  if (!supabase) return [];
+
+  // Try fetching from customers table
+  const { data: dbCustomers } = await supabase
+    .from('customers')
+    .select('*')
+    .order('is_vip', { ascending: false });
+
+  // Also fetch bookings to calculate aggregate metrics
+  const { data: bookings } = await supabase
+    .from('bookings')
+    .select('id, booking_code, travel_date, customer_phone, customer_name, customer_email, auth_method, total_price, payment_status, booking_status');
+
+  const bookingsByPhone = {};
+  (bookings || []).forEach((b) => {
+    if (!b.customer_phone) return;
+    if (!bookingsByPhone[b.customer_phone]) {
+      bookingsByPhone[b.customer_phone] = [];
+    }
+    bookingsByPhone[b.customer_phone].push(b);
+  });
+
+  // If customers table has data, enrich it
+  if (dbCustomers && dbCustomers.length > 0) {
+    return dbCustomers.map((c) => {
+      const cBookings = bookingsByPhone[c.phone] || [];
+      const total_trips = cBookings.length;
+      const completed_trips = cBookings.filter((b) => b.booking_status !== 'CANCELLED').length;
+      const cancelled_trips = cBookings.filter((b) => b.booking_status === 'CANCELLED').length;
+      const total_spent = cBookings
+        .filter((b) => b.booking_status !== 'CANCELLED' && b.payment_status === 'PAID')
+        .reduce((sum, b) => sum + (Number(b.total_price) || 0), 0);
+      const last_travel_date = cBookings.reduce((max, b) => (!max || b.travel_date > max ? b.travel_date : max), null);
+
+      return {
+        ...c,
+        total_trips,
+        completed_trips,
+        cancelled_trips,
+        total_spent,
+        last_travel_date
+      };
+    });
+  }
+
+  // Fallback: If customers table is empty, derive from bookings
+  const derived = Object.entries(bookingsByPhone).map(([phone, bList], index) => {
+    const first = bList[0];
+    const total_trips = bList.length;
+    const completed_trips = bList.filter((b) => b.booking_status !== 'CANCELLED').length;
+    const cancelled_trips = bList.filter((b) => b.booking_status === 'CANCELLED').length;
+    const total_spent = bList
+      .filter((b) => b.booking_status !== 'CANCELLED' && b.payment_status === 'PAID')
+      .reduce((sum, b) => sum + (Number(b.total_price) || 0), 0);
+    const last_travel_date = bList.reduce((max, b) => (!max || b.travel_date > max ? b.travel_date : max), null);
+
+    return {
+      id: index + 1,
+      phone,
+      name: first.customer_name || 'Pelanggan',
+      email: first.customer_email || '',
+      auth_method: first.auth_method || 'phone',
+      is_vip: false,
+      is_blacklisted: false,
+      notes: '',
+      total_trips,
+      completed_trips,
+      cancelled_trips,
+      total_spent,
+      last_travel_date,
+      created_at: first.created_at || new Date().toISOString()
+    };
+  });
+
+  return derived;
+}
+
+// 13. Fetch single customer booking history
+export async function getCustomerBookings(phone) {
+  if (!supabase || !phone) return [];
+  const { data, error } = await supabase
+    .from('bookings')
+    .select(`
+      id, booking_code, schedule_id, travel_date, customer_name, customer_phone,
+      seat_numbers, seats_count, price_per_seat, total_price, payment_method,
+      payment_status, booking_status, created_at,
+      schedule:schedules!schedule_id(
+        departure_time, vehicle_model,
+        origin:pooling_spots!origin_spot_id(name, city),
+        destination:pooling_spots!destination_spot_id(name, city)
+      )
+    `)
+    .eq('customer_phone', phone)
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('Error fetching customer bookings from Supabase:', error);
+    return [];
+  }
+
+  return (data || []).map((b) => ({
+    ...b,
+    departure_time: b.schedule?.departure_time,
+    vehicle_model: b.schedule?.vehicle_model,
+    origin_name: b.schedule?.origin?.name,
+    origin_city: b.schedule?.origin?.city,
+    destination_name: b.schedule?.destination?.name,
+    destination_city: b.schedule?.destination?.city
+  }));
+}
+
+// 14. Update customer record (VIP, Blacklist, Notes)
+export async function updateCustomer(id, customerData) {
+  if (!supabase) return { success: false, error: 'Supabase client not initialized' };
+
+  const { data, error } = await supabase
+    .from('customers')
+    .update({
+      ...customerData,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating customer in Supabase:', error);
+    return { success: false, error: error.message };
+  }
+
+  return { success: true, customer: data };
+}
+

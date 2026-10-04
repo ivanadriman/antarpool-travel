@@ -3,11 +3,13 @@ import {
   Volume2, VolumeX, Bell, DollarSign, Users, Calendar, 
   Clock, Plus, Edit2, CheckCircle, XCircle, TrendingUp, 
   MapPin, Shield, RefreshCw, Car, ChevronRight, AlertCircle,
-  Grid, Trash2, History, LogOut
+  Grid, Trash2, History, LogOut, Search, MessageCircle,
+  Star, ShieldAlert, Phone, Mail, ExternalLink, FileText
 } from 'lucide-react';
 import ScheduleModal from './components/ScheduleModal';
 import ArmadaModal from './components/ArmadaModal';
 import OrderTimeline from './components/OrderTimeline';
+import CustomerModal from './components/CustomerModal';
 import LoginGate from './components/LoginGate';
 import { playChime, speakIndonesian } from './voiceNotifier';
 import { formatIDR, formatDateID } from './utils';
@@ -15,7 +17,7 @@ import { supabase, isSupabaseConfigured } from './supabase';
 import { 
   getBusinessBookings, getArmadas, getSpots, getBusinessSchedules,
   updateBookingStatus, saveSchedule, deleteSchedule, saveArmada,
-  deleteArmada, getTimeline, getAnalytics 
+  deleteArmada, getTimeline, getAnalytics, getCustomers 
 } from './api';
 
 const API_BASE = import.meta.env.VITE_API_URL || '';
@@ -75,6 +77,14 @@ export default function App() {
   // Timeline state
   const [timelineEvents, setTimelineEvents] = useState([]);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
+
+  // Customers (CRM) state
+  const [customers, setCustomers] = useState([]);
+  const [loadingCustomers, setLoadingCustomers] = useState(false);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('all'); // 'all', 'vip', 'cancelled', 'blacklisted'
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [customerModalOpen, setCustomerModalOpen] = useState(false);
 
   // Audio permission banner for browser autoplay policy
   const [audioUnlocked, setAudioUnlocked] = useState(false);
@@ -383,6 +393,18 @@ export default function App() {
     }
   };
 
+  const fetchCustomers = async () => {
+    setLoadingCustomers(true);
+    try {
+      const data = await getCustomers();
+      setCustomers(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error('Error fetching customers:', err);
+    } finally {
+      setLoadingCustomers(false);
+    }
+  };
+
   useEffect(() => {
     if (!operatorUser) return;
     fetchBookings();
@@ -390,6 +412,7 @@ export default function App() {
     fetchArmadas();
     fetchAnalytics();
     fetchTimeline();
+    fetchCustomers();
   }, [operatorUser, orderFilterDate, orderFilterStatus, orderFilterBookingStatus, scheduleFilterDate]);
 
   // 3. Update booking status (e.g. Mark as PAID on arrival, or CANCELLED)
@@ -400,6 +423,7 @@ export default function App() {
       fetchSchedulesAndSpots();
       fetchAnalytics();
       fetchTimeline();
+      fetchCustomers();
     } catch (err) {
       console.error('Failed to update status:', err);
     }
@@ -609,6 +633,24 @@ export default function App() {
             {armadas.length > 0 && (
               <span className="px-2 py-0.5 text-xs rounded-full bg-slate-800 text-slate-300 font-bold border border-slate-700">
                 {armadas.length}
+              </span>
+            )}
+          </button>
+
+          {/* TAB: PELANGGAN (USERS CRM) */}
+          <button
+            onClick={() => setActiveTab('customers')}
+            className={`py-3.5 border-b-2 transition flex items-center gap-2 shrink-0 cursor-pointer ${
+              activeTab === 'customers'
+                ? 'border-blue-500 text-blue-400'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>Pelanggan</span>
+            {customers.length > 0 && (
+              <span className="px-2 py-0.5 text-xs rounded-full bg-blue-600/80 text-white font-bold">
+                {customers.length}
               </span>
             )}
           </button>
@@ -1224,6 +1266,311 @@ export default function App() {
           </div>
         )}
 
+        {/* ================= TAB: MANAJEMEN PELANGGAN (CRM) ================= */}
+        {activeTab === 'customers' && (
+          <div className="space-y-6">
+            {/* Top Header & Overview KPI Cards */}
+            <div>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+                    <Users className="w-5 h-5 text-blue-400" />
+                    Direktori & Manajemen Pelanggan
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Kelola data penumpang, riwayat perjalanan, status VIP, no-show/blacklist, dan hubungi via WhatsApp langsung.
+                  </p>
+                </div>
+                <button
+                  onClick={fetchCustomers}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-xs font-semibold text-slate-300 flex items-center gap-2 transition cursor-pointer self-start sm:self-auto"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loadingCustomers ? 'animate-spin text-blue-400' : ''}`} />
+                  <span>Segarkan Data</span>
+                </button>
+              </div>
+
+              {/* CRM KPI Cards */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                    Total Pelanggan
+                  </span>
+                  <p className="text-2xl font-black text-white mt-1">
+                    {customers.length}
+                  </p>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                    Penumpang terdaftar
+                  </span>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
+                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                    Pelanggan VIP
+                  </span>
+                  <p className="text-2xl font-black text-amber-400 mt-1">
+                    {customers.filter((c) => c.is_vip).length}
+                  </p>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                    Prioritas layanan istimewa
+                  </span>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
+                    Total Omzet Pelanggan (LTV)
+                  </span>
+                  <p className="text-xl sm:text-2xl font-black text-emerald-400 mt-1 truncate">
+                    {formatIDR(customers.reduce((acc, c) => acc + (Number(c.total_spent) || 0), 0))}
+                  </p>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                    Akumulasi transaksi selesai
+                  </span>
+                </div>
+
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl shadow-xs">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider block flex items-center gap-1">
+                    <ShieldAlert className="w-3.5 h-3.5 text-red-400" />
+                    No-Show / Terblokir
+                  </span>
+                  <p className="text-2xl font-black text-red-400 mt-1">
+                    {customers.filter((c) => c.is_blacklisted).length}
+                  </p>
+                  <span className="text-[11px] text-slate-500 mt-0.5 block">
+                    Peringatan dispatcher
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Toolbar */}
+            <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+              {/* Search Bar */}
+              <div className="relative w-full md:w-96">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  placeholder="Cari nama, WhatsApp/HP, atau email..."
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-800 focus:outline-hidden focus:border-blue-500 text-xs text-slate-200 placeholder-slate-500"
+                />
+              </div>
+
+              {/* Segment Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto">
+                <button
+                  onClick={() => setCustomerFilter('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+                    customerFilter === 'all'
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  Semua ({customers.length})
+                </button>
+                <button
+                  onClick={() => setCustomerFilter('vip')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 flex items-center gap-1 ${
+                    customerFilter === 'vip'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  <Star className="w-3.5 h-3.5 fill-current" />
+                  VIP Saja ({customers.filter((c) => c.is_vip).length})
+                </button>
+                <button
+                  onClick={() => setCustomerFilter('cancelled')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 ${
+                    customerFilter === 'cancelled'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  Pernah Batal ({customers.filter((c) => (c.cancelled_trips || 0) > 0).length})
+                </button>
+                <button
+                  onClick={() => setCustomerFilter('blacklisted')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer shrink-0 flex items-center gap-1 ${
+                    customerFilter === 'blacklisted'
+                      ? 'bg-red-600 text-white'
+                      : 'bg-slate-950 text-slate-400 hover:text-slate-200 border border-slate-800'
+                  }`}
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" />
+                  Terblokir ({customers.filter((c) => c.is_blacklisted).length})
+                </button>
+              </div>
+            </div>
+
+            {/* Customer List / Cards */}
+            {loadingCustomers ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400 flex flex-col items-center gap-3">
+                <RefreshCw className="w-8 h-8 animate-spin text-blue-500" />
+                <span className="text-sm font-semibold">Memuat data pelanggan...</span>
+              </div>
+            ) : (() => {
+              const filtered = customers.filter((c) => {
+                if (customerFilter === 'vip' && !c.is_vip) return false;
+                if (customerFilter === 'blacklisted' && !c.is_blacklisted) return false;
+                if (customerFilter === 'cancelled' && !(c.cancelled_trips > 0)) return false;
+
+                if (customerSearch.trim()) {
+                  const q = customerSearch.toLowerCase();
+                  const matchName = (c.name || '').toLowerCase().includes(q);
+                  const matchPhone = (c.phone || '').toLowerCase().includes(q);
+                  const matchEmail = (c.email || '').toLowerCase().includes(q);
+                  const matchNotes = (c.notes || '').toLowerCase().includes(q);
+                  if (!matchName && !matchPhone && !matchEmail && !matchNotes) return false;
+                }
+                return true;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-400">
+                    <Users className="w-10 h-10 text-slate-600 mx-auto mb-2" />
+                    <p className="text-sm font-bold text-slate-300">Tidak ada pelanggan yang cocok dengan pencarian.</p>
+                    <p className="text-xs text-slate-500 mt-1">Coba gunakan kata kunci pencarian atau filter yang berbeda.</p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filtered.map((c) => {
+                    const initials = c.name
+                      ? c.name.split(' ').map((n) => n[0]).slice(0, 2).join('').toUpperCase()
+                      : 'PL';
+
+                    let cleanPhone = (c.phone || '').replace(/[^0-9]/g, '');
+                    if (cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.slice(1);
+                    const waGreeting = encodeURIComponent(`Halo Bapak/Ibu ${c.name}, kami dari tim operasional AntarPool Travel...`);
+                    const waLink = cleanPhone ? `https://wa.me/${cleanPhone}?text=${waGreeting}` : null;
+
+                    return (
+                      <div
+                        key={c.id || c.phone}
+                        className={`bg-slate-900 border rounded-2xl p-5 flex flex-col justify-between transition hover:border-slate-700 shadow-xs ${
+                          c.is_blacklisted 
+                            ? 'border-red-900/60 bg-red-950/10' 
+                            : c.is_vip 
+                              ? 'border-amber-900/60 bg-amber-950/10' 
+                              : 'border-slate-800'
+                        }`}
+                      >
+                        <div>
+                          {/* Card Header */}
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
+                                c.is_blacklisted
+                                  ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                  : c.is_vip
+                                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-xs shadow-amber-500/20'
+                                    : 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                              }`}>
+                                {initials}
+                              </div>
+                              <div>
+                                <h4 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
+                                  <span>{c.name}</span>
+                                  {c.is_vip ? (
+                                    <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400 shrink-0" title="Pelanggan VIP" />
+                                  ) : null}
+                                </h4>
+                                <span className="text-xs text-slate-400 block mt-0.5">
+                                  {c.phone || 'Tanpa nomor HP'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Status Pill */}
+                            <div>
+                              {c.is_blacklisted ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-950/80 text-red-400 border border-red-800/60">
+                                  No-Show
+                                </span>
+                              ) : c.is_vip ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-400 border border-amber-800/60">
+                                  VIP
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-950/80 text-blue-400 border border-blue-800/60">
+                                  Aktif
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Quick Stats Grid */}
+                          <div className="grid grid-cols-2 gap-2 mt-4 p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 text-xs">
+                            <div>
+                              <span className="text-[11px] text-slate-500 block">Total Pesanan</span>
+                              <span className="font-bold text-slate-200 mt-0.5 block">
+                                {c.total_trips || 0} trip
+                                {c.cancelled_trips > 0 ? (
+                                  <span className="text-red-400 text-[10px] ml-1">({c.cancelled_trips} batal)</span>
+                                ) : null}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[11px] text-slate-500 block">Total Transaksi</span>
+                              <span className="font-bold text-emerald-400 mt-0.5 block truncate">
+                                {formatIDR(c.total_spent || 0)}
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Notes snippet if exists */}
+                          {c.notes && (
+                            <div className="mt-3 p-2.5 rounded-xl bg-slate-950/40 border border-slate-800 text-[11px] text-slate-300 flex items-start gap-1.5">
+                              <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                              <span className="line-clamp-2">{c.notes}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Card Footer Actions */}
+                        <div className="pt-4 border-t border-slate-800/80 flex items-center justify-between gap-2 mt-4">
+                          {waLink ? (
+                            <a
+                              href={waLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3 py-1.5 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-semibold flex items-center gap-1.5 transition"
+                              title="Kirim pesan WhatsApp"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>WhatsApp</span>
+                              <ExternalLink className="w-2.5 h-2.5 opacity-70" />
+                            </a>
+                          ) : (
+                            <div />
+                          )}
+
+                          <button
+                            onClick={() => {
+                              setSelectedCustomer(c);
+                              setCustomerModalOpen(true);
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+                          >
+                            <span>Kelola & Riwayat</span>
+                            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
         {/* ================= TAB 3: TIMELINE DAN ALUR WAKTU PESANAN ================= */}
         {activeTab === 'timeline' && (
           <OrderTimeline
@@ -1370,6 +1717,20 @@ export default function App() {
         }}
         editingArmada={editingArmada}
         onSave={handleSaveArmada}
+      />
+
+      {/* Customer Detail & CRM Modal */}
+      <CustomerModal
+        isOpen={customerModalOpen}
+        onClose={() => {
+          setCustomerModalOpen(false);
+          setSelectedCustomer(null);
+        }}
+        customer={selectedCustomer}
+        onCustomerUpdated={(updated) => {
+          setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+          setSelectedCustomer(updated);
+        }}
       />
     </div>
   );

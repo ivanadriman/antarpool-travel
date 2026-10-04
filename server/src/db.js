@@ -218,6 +218,44 @@ export async function initDb() {
     }
   }
 
+  // 7. Customers table (Client App Users CRM)
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS customers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT,
+      auth_method TEXT DEFAULT 'phone',
+      is_vip INTEGER DEFAULT 0,
+      is_blacklisted INTEGER DEFAULT 0,
+      notes TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await dbRun(`
+    CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)
+  `);
+
+  // Backfill existing bookings into customers if empty
+  const customersCount = await dbGet('SELECT COUNT(*) as count FROM customers');
+  if (customersCount && customersCount.count === 0) {
+    const existingBookings = await dbAll(
+      `SELECT customer_name, customer_phone, customer_email, auth_method, MIN(created_at) as first_seen
+       FROM bookings
+       WHERE customer_phone IS NOT NULL AND customer_phone != ''
+       GROUP BY customer_phone`
+    );
+    for (const b of existingBookings) {
+      await dbRun(
+        `INSERT OR IGNORE INTO customers (phone, name, email, auth_method, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [b.customer_phone, b.customer_name, b.customer_email || '', b.auth_method || 'phone', b.first_seen, b.first_seen]
+      );
+    }
+  }
+
   // Backfill existing bookings into timeline if timeline is empty
   const timelineCount = await dbGet('SELECT COUNT(*) as count FROM order_timeline_events');
   if (timelineCount.count === 0) {
@@ -413,5 +451,84 @@ export async function initDb() {
     }
   }
 }
+
+// ==========================================
+// CUSTOMER CRM & MANAGEMENT HELPERS
+// ==========================================
+
+export const upsertCustomer = async ({ phone, name, email, auth_method }) => {
+  if (!phone) return null;
+  const existing = await dbGet('SELECT id FROM customers WHERE phone = ?', [phone]);
+  if (existing) {
+    await dbRun(
+      `UPDATE customers 
+       SET name = COALESCE(NULLIF(?, ''), name),
+           email = COALESCE(NULLIF(?, ''), email),
+           auth_method = COALESCE(NULLIF(?, ''), auth_method),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`,
+      [name || null, email || null, auth_method || null, existing.id]
+    );
+    return existing.id;
+  } else {
+    const res = await dbRun(
+      `INSERT INTO customers (phone, name, email, auth_method)
+       VALUES (?, ?, ?, ?)`,
+      [phone, name || 'Pelanggan', email || '', auth_method || 'phone']
+    );
+    return res.lastID;
+  }
+};
+
+export const getEnrichedCustomers = async () => {
+  const rows = await dbAll(`
+    SELECT 
+      c.id, c.phone, c.name, c.email, c.auth_method, c.is_vip, c.is_blacklisted, c.notes, c.created_at, c.updated_at,
+      COUNT(b.id) as total_trips,
+      SUM(CASE WHEN b.booking_status != 'CANCELLED' THEN 1 ELSE 0 END) as completed_trips,
+      SUM(CASE WHEN b.booking_status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_trips,
+      COALESCE(SUM(CASE WHEN b.booking_status != 'CANCELLED' AND b.payment_status = 'PAID' THEN b.total_price ELSE 0 END), 0) as total_spent,
+      MAX(b.travel_date) as last_travel_date
+    FROM customers c
+    LEFT JOIN bookings b ON c.phone = b.customer_phone
+    GROUP BY c.id
+    ORDER BY c.is_vip DESC, total_trips DESC, c.updated_at DESC
+  `);
+  return rows;
+};
+
+export const getCustomerBookings = async (phone) => {
+  if (!phone) return [];
+  return await dbAll(`
+    SELECT 
+      b.id, b.booking_code, b.schedule_id, b.travel_date, b.customer_name, b.customer_phone,
+      b.seat_numbers, b.seats_count, b.price_per_seat, b.total_price, b.payment_method,
+      b.payment_status, b.booking_status, b.created_at,
+      s.departure_time, s.vehicle_model,
+      origin.name as origin_name, origin.city as origin_city,
+      dest.name as destination_name, dest.city as destination_city
+    FROM bookings b
+    LEFT JOIN schedules s ON b.schedule_id = s.id
+    LEFT JOIN pooling_spots origin ON s.origin_spot_id = origin.id
+    LEFT JOIN pooling_spots dest ON s.destination_spot_id = dest.id
+    WHERE b.customer_phone = ?
+    ORDER BY b.created_at DESC
+  `, [phone]);
+};
+
+export const updateCustomerRecord = async (id, { name, email, is_vip, is_blacklisted, notes }) => {
+  const fields = [];
+  const params = [];
+  if (name !== undefined) { fields.push('name = ?'); params.push(name); }
+  if (email !== undefined) { fields.push('email = ?'); params.push(email); }
+  if (is_vip !== undefined) { fields.push('is_vip = ?'); params.push(is_vip ? 1 : 0); }
+  if (is_blacklisted !== undefined) { fields.push('is_blacklisted = ?'); params.push(is_blacklisted ? 1 : 0); }
+  if (notes !== undefined) { fields.push('notes = ?'); params.push(notes); }
+  fields.push('updated_at = CURRENT_TIMESTAMP');
+  params.push(id);
+
+  await dbRun(`UPDATE customers SET ${fields.join(', ')} WHERE id = ?`, params);
+  return await dbGet('SELECT * FROM customers WHERE id = ?', [id]);
+};
 
 export default db;

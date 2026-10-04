@@ -21,3 +21,7 @@ export const saveArmada = (...args) => adapter.saveArmada(...args);
 export const deleteArmada = (...args) => adapter.deleteArmada(...args);
 export const getTimeline = (...args) => adapter.getTimeline(...args);
 export const getAnalytics = (...args) => adapter.getAnalytics(...args);
+export const getCustomers = (...args) => adapter.getCustomers(...args);
+export const getCustomerBookings = (...args) => adapter.getCustomerBookings(...args);
+export const updateCustomer = (...args) => adapter.updateCustomer(...args);
+

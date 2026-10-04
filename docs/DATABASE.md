@@ -85,6 +85,19 @@ Audit trail recording life-cycle events.
 - `details_json`: Snapshot payload
 - `created_at`: Event timestamp
 
+### 7. `customers` (Client App Users CRM)
+Directory of passenger accounts and operational CRM attributes.
+- `id`: Primary key
+- `phone`: Unique identifier / WhatsApp contact (Indexed)
+- `name`: Passenger full name
+- `email`: Passenger email (optional)
+- `auth_method`: Authentication provider (`'phone'`, `'email'`, `'google'`)
+- `is_vip`: Boolean flag (1/0) indicating VIP passenger status
+- `is_blacklisted`: Boolean flag (1/0) indicating repeat no-show or problematic booking history
+- `notes`: Custom operator dispatch and preference notes
+- `created_at`: Registration timestamp
+- `updated_at`: Last modification timestamp
+
 ## State Transitions
 
 ```

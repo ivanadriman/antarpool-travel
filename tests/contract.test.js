@@ -248,3 +248,62 @@ test('6. Analytics report reflects active and pending totals', async () => {
   assert.ok(typeof stats.pending_revenue === 'number');
   assert.ok(Array.isArray(stats.top_routes));
 });
+
+test('7. Customers endpoint returns enriched CRM profiles and requires operator token', async () => {
+  // Unauthorized request should fail
+  const unauthRes = await fetch(`${BASE_URL}/api/business/customers`);
+  assert.equal(unauthRes.status, 401);
+
+  // Authorized request
+  const res = await fetch(`${BASE_URL}/api/business/customers`, {
+    headers: { Authorization: `Bearer ${operatorToken}` }
+  });
+  assert.equal(res.status, 200);
+  const customers = await res.json();
+  assert.ok(Array.isArray(customers));
+  assert.ok(customers.length > 0);
+
+  // Verify fields on customer
+  const first = customers[0];
+  assert.ok(first.id);
+  assert.ok(first.name);
+  assert.ok(first.phone);
+  assert.ok(typeof first.total_trips === 'number');
+  assert.ok(typeof first.total_spent === 'number');
+});
+
+test('8. Updating customer VIP status, blacklist flag, and notes persists correctly', async () => {
+  // Fetch existing customer
+  const listRes = await fetch(`${BASE_URL}/api/business/customers`, {
+    headers: { Authorization: `Bearer ${operatorToken}` }
+  });
+  const customers = await listRes.json();
+  const customer = customers[0];
+
+  // Update customer
+  const updateRes = await fetch(`${BASE_URL}/api/business/customers/${customer.id}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${operatorToken}`
+    },
+    body: JSON.stringify({
+      is_vip: true,
+      is_blacklisted: false,
+      notes: 'Customer test note: VIP priority passenger'
+    })
+  });
+  assert.equal(updateRes.status, 200);
+  const updatedData = await updateRes.json();
+  assert.equal(updatedData.customer.is_vip, 1);
+  assert.equal(updatedData.customer.notes, 'Customer test note: VIP priority passenger');
+
+  // Verify customer booking history endpoint
+  const bookingsRes = await fetch(`${BASE_URL}/api/business/customers/${encodeURIComponent(customer.phone)}/bookings`, {
+    headers: { Authorization: `Bearer ${operatorToken}` }
+  });
+  assert.equal(bookingsRes.status, 200);
+  const bookings = await bookingsRes.json();
+  assert.ok(Array.isArray(bookings));
+});
+

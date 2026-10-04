@@ -153,3 +153,38 @@ export async function getAnalytics() {
   }
   return res.json();
 }
+
+// 12. Fetch customers directory (CRM)
+export async function getCustomers() {
+  const res = await fetch(`${API_BASE}/api/business/customers`, { headers: getAuthHeaders() });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Gagal memuat data pelanggan');
+  }
+  return res.json();
+}
+
+// 13. Fetch single customer booking history
+export async function getCustomerBookings(phone) {
+  const res = await fetch(`${API_BASE}/api/business/customers/${encodeURIComponent(phone)}/bookings`, { headers: getAuthHeaders() });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || 'Gagal memuat riwayat tiket pelanggan');
+  }
+  return res.json();
+}
+
+// 14. Update customer record (VIP, Blacklist, Notes)
+export async function updateCustomer(id, customerData) {
+  const res = await fetch(`${API_BASE}/api/business/customers/${id}`, {
+    method: 'PUT',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(customerData)
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data.error || 'Gagal memperbarui data pelanggan');
+  }
+  return data;
+}
+

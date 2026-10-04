@@ -33,8 +33,14 @@ Click **Uji Notifikasi Suara** once after opening the page so the browser allows
    - *Batalkan* – cancel (releases seats; asks for confirmation).
 2. **Jadwal & Tarif (Schedules):** add/edit trips (route, time, price, vehicle), toggle active, adjust fares. Use the date picker to see remaining seats for a given day (*10 Kursi (Sisa 7)*). A schedule with active bookings cannot be deleted — cancel the bookings or deactivate the schedule instead.
 3. **Manajemen Armada (Fleet):** create vehicles. Choose rows × columns, then click cells to cycle *Kursi → Lorong → Kosong → Supir*. Seats are auto-labelled (1A, 2B …). Assign the vehicle when creating a schedule.
-4. **Timeline:** audit trail of every order event (who did what, when); search by code/name/phone.
-5. **Statistik & Laporan:** paid vs. pending revenue, passenger count, top 5 routes, busiest hours (excludes cancelled orders; all-time, no date range).
+4. **Pelanggan (Customers CRM):** manage registered passenger profiles and contacts.
+   - *Pencarian & Filter:* cari berdasarkan nama, nomor HP/WhatsApp, atau email; filter berdasarkan segmen (*VIP*, *Pernah Batal*, *Terblokir*).
+   - *Hubungi via WhatsApp:* tombol langsung 1-klik untuk membuka percakapan WhatsApp dengan penumpang untuk koordinasi penjemputan atau pengumuman keterlambatan.
+   - *Status VIP & No-Show:* tandai penumpang istimewa (*VIP*) atau tandai penumpang bermasalah (*No-Show / Terblokir*).
+   - *Catatan Operator:* simpan catatan preferensi penumpang (misal: "Suka duduk depan", "Bawa koper besar").
+   - *Kelola & Riwayat:* buka riwayat lengkap tiket dan status pembayaran penumpang tersebut.
+5. **Timeline:** audit trail of every order event (who did what, when); search by code/name/phone.
+6. **Statistik & Laporan:** paid vs. pending revenue, passenger count, top 5 routes, busiest hours (excludes cancelled orders; all-time, no date range).
 
 ### Troubleshooting for operators
 | Symptom | Fix |

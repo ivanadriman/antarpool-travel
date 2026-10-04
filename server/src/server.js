@@ -3,7 +3,17 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import { WebSocketServer, WebSocket } from 'ws';
-import { initDb, dbAll, dbGet, dbRun, withTransaction } from './db.js';
+import { 
+  initDb, 
+  dbAll, 
+  dbGet, 
+  dbRun, 
+  withTransaction,
+  upsertCustomer,
+  getEnrichedCustomers,
+  getCustomerBookings,
+  updateCustomerRecord 
+} from './db.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -422,6 +432,20 @@ app.post('/api/bookings', async (req, res) => {
         });
       }
       throw txErr;
+    }
+
+    // Auto-upsert customer into CRM directory
+    if (customer_phone) {
+      try {
+        await upsertCustomer({
+          phone: customer_phone,
+          name: customer_name,
+          email: customer_email,
+          auth_method: auth_method || 'phone'
+        });
+      } catch (custErr) {
+        console.error('Failed to upsert customer:', custErr);
+      }
     }
 
     // Broadcast in real-time to all connected business admin tabs with voice payload in Indonesian
@@ -1110,6 +1134,43 @@ app.get('/api/business/timeline', requireOperator, async (req, res) => {
   } catch (err) {
     console.error('Error fetching order timeline:', err);
     res.status(500).json({ error: 'Failed to fetch order timeline events' });
+  }
+});
+
+// 13. BUSINESS: Customers CRM Management
+app.get('/api/business/customers', requireOperator, async (req, res) => {
+  try {
+    const customers = await getEnrichedCustomers();
+    res.json(customers);
+  } catch (err) {
+    console.error('Error fetching customers:', err);
+    res.status(500).json({ error: 'Gagal mengambil data pelanggan' });
+  }
+});
+
+app.get('/api/business/customers/:phone/bookings', requireOperator, async (req, res) => {
+  try {
+    const { phone } = req.params;
+    const bookings = await getCustomerBookings(phone);
+    res.json(bookings);
+  } catch (err) {
+    console.error('Error fetching customer bookings:', err);
+    res.status(500).json({ error: 'Gagal mengambil riwayat pesanan pelanggan' });
+  }
+});
+
+app.put('/api/business/customers/:id', requireOperator, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, is_vip, is_blacklisted, notes } = req.body;
+    const updated = await updateCustomerRecord(id, { name, email, is_vip, is_blacklisted, notes });
+    if (!updated) {
+      return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
+    }
+    res.json({ message: 'Data pelanggan berhasil diperbarui', customer: updated });
+  } catch (err) {
+    console.error('Error updating customer:', err);
+    res.status(500).json({ error: 'Gagal memperbarui data pelanggan' });
   }
 });
 
