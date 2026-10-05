@@ -1,8 +1,8 @@
 # 🚗 AntarPool Travel & Rental Platform
 
 A full-stack, real-time travel pooling platform designed for inter-city shuttle services in Indonesia (routes: Surabaya ⇄ Malang). It features two responsive web applications:
-- **Client App (`client/`)**: Passenger booking portal with interactive seat layout picker, digital boarding pass with QR, and ticket self-cancellation.
-- **Business App (`business/`)**: Operator management dashboard with live order timelines, Indonesian voice announcements (`id-ID`), interactive fleet cabin layout builder, and business analytics.
+- **Client App (`client/`)**: Passenger booking portal with interactive seat layout picker, digital boarding pass with QR, profile manager (Kota Domisili & NIK), and ticket self-cancellation.
+- **Business App (`business/`)**: Operator management dashboard with live order timelines, Indonesian voice announcements (`id-ID`), interactive fleet cabin layout builder, customer CRM with WhatsApp integration, and business analytics.
 
 ---
 
@@ -10,11 +10,11 @@ A full-stack, real-time travel pooling platform designed for inter-city shuttle 
 
 The complete, active technical documentation is maintained in the [`docs/`](docs/) directory:
 
-- 📐 **[Architecture & Dual Targets](docs/ARCHITECTURE.md)**: Details on the Demo (Supabase) vs Production (Express + SQLite) operational split and dynamic adapter pattern.
-- 📋 **[Architecture Decision Records](docs/DECISIONS.md)**: ADRs on operational split, dynamic adapters, atomic double-booking prevention, and JWT authentication.
+- 📐 **[Architecture & Dual Targets](docs/ARCHITECTURE.md)**: Details on the Demo (Supabase) vs Production (Express + SQLite) operational split, layered backend modules, and dynamic adapter pattern.
+- 📋 **[Architecture Decision Records](docs/DECISIONS.md)**: ADRs on operational split, dynamic adapters, atomic double-booking prevention, JWT auth, layered architecture, and CRM identity.
 - 💻 **[Development Guide](docs/DEVELOPMENT.md)**: Monorepo workspace setup, environment variables, commands, and conventions.
-- 🗄️ **[Database Schema](docs/DATABASE.md)**: Tables, `booking_seats` atomic locking, partial unique indexes, and RLS policies.
-- 🔌 **[API Reference](docs/API_REFERENCE.md)**: Front-end data contract, REST endpoints, and JWT authentication.
+- 🗄️ **[Database Schema](docs/DATABASE.md)**: Tables, `booking_seats` atomic locking, partial unique indexes, CRM attributes, and RLS policies.
+- 🔌 **[API Reference](docs/API_REFERENCE.md)**: Front-end data contract, REST route controllers, customer profile endpoints, and JWT authentication.
 - 🧪 **[Testing Guide](docs/TESTING.md)**: Contract tests, 10-parallel-request concurrency verification, and test execution.
 - 🔒 **[Security Policy](docs/SECURITY.md)**: Operator access control, vulnerability status matrix, and production hardening checklist.
 - 🚀 **[Deployment Guide](docs/DEPLOYMENT.md)**: Deployment steps for Vercel (Demo) and VPS with persistent storage (Production).
@@ -41,18 +41,19 @@ AntarPool supports two operational targets configured via the `VITE_BACKEND` env
                          │                             │
                          ▼                             ▼
               Demo Target (Vercel)          Production Target (VPS)
-            - Direct Supabase queries     - Express REST API (Port 5000)
+            - Direct Supabase queries     - Layered Express REST API (Port 5000)
             - Realtime channel updates    - SQLite with WAL & Async Mutex
             - Zero-cost prototype         - Atomic booking in booking_seats
-                                          - Server-side price calculation
+            - Hybrid CRM Fallback         - Server-side price calculation
                                           - HMAC-SHA256 JWT Operator Auth
 ```
 
 1. **Demo Target (`VITE_BACKEND=supabase`)**:
    - Zero-cost deployment on Vercel + Supabase free tier.
    - Ideal for client presentations, design reviews, and portfolio demonstration.
+   - Includes automatic hybrid fallback if optional CRM tables are not yet migrated in Supabase.
 2. **Production Target (`VITE_BACKEND=rest`)**:
-   - Maintained Node.js Express server + SQLite with Write-Ahead Logging (`WAL`).
+   - Layered Node.js Express server + SQLite with Write-Ahead Logging (`WAL`).
    - Atomic seat booking backed by `booking_seats` table and partial unique indexes (`WHERE status != 'CANCELLED'`).
    - Server-side pricing computation and collision-resistant booking code generation.
    - Stateless HMAC-SHA256 JWT authentication for operator endpoints.
@@ -62,30 +63,38 @@ AntarPool supports two operational targets configured via the `VITE_BACKEND` env
 ## 📁 Repository Structure
 
 ```
-Car - Travel and Rental/
+antarpool-travel/
 ├── client/                     # Passenger Booking Web App (Port 5173)
 │   ├── src/
 │   │   ├── adapters/          # Supabase & REST backend adapters
-│   │   ├── components/        # InteractiveSeatMap, TicketPass, AuthModal
+│   │   ├── components/        # ClientHeader, SearchHero, MyBookingsModal, SeatMap, TicketPass
 │   │   ├── api.js             # Dynamic backend dispatcher
-│   │   └── App.jsx            # Booking flow & 'Tiket Saya' drawer
+│   │   └── App.jsx            # Clean coordinator component (< 350 LOC)
 ├── business/                   # Operator & Admin Dashboard (Port 5174)
 │   ├── src/
 │   │   ├── adapters/          # Supabase & REST backend adapters
-│   │   ├── components/        # ArmadaModal, ScheduleModal, LoginGate
+│   │   ├── components/
+│   │   │   ├── Navbar.jsx     # Header, connection badge & tab navigation
+│   │   │   ├── ToastContainer.jsx # Floating alerts & voice toasts
+│   │   │   ├── tabs/          # OrdersTab, SchedulesTab, ArmadasTab, CustomersTab, AnalyticsTab
+│   │   │   └── modals/        # ArmadaModal, ScheduleModal, CustomerModal, ConnectionModal
 │   │   ├── api.js             # Dynamic backend dispatcher
 │   │   ├── voiceNotifier.js   # Web Audio chime + SpeechSynthesis (id-ID)
-│   │   └── App.jsx            # Orders, Schedules, Armadas, Analytics
-├── server/                     # Production REST Backend (Port 5000)
+│   │   └── App.jsx            # Clean coordinator component (< 450 LOC)
+├── server/                     # Production Layered REST Backend (Port 5000)
 │   ├── src/
+│   │   ├── config/env.js      # Environment configuration defaults
+│   │   ├── middleware/auth.js # JWT signing & requireOperator middleware
+│   │   ├── routes/            # auth, spots, schedules, armadas, bookings, customers, analytics, timeline
+│   │   ├── websocket.js       # WebSocket server hub & real-time broadcasts
 │   │   ├── db.js              # SQLite schema, WAL pragma, async mutex
-│   │   └── server.js          # Express API, JWT auth, atomic booking
+│   │   └── server.js          # Lean application entrypoint (82 LOC)
 │   ├── travel.db              # SQLite database file
 │   └── test_integration.py    # Python integration test script
 ├── shared/                     # Shared Monorepo Package (@antarpool/shared)
-│   └── src/index.js           # IDR currency & Indonesian date formatters
+│   └── src/index.js           # Formatters (IDR, Date), Validators (NIK, Phone, Email), Presets
 ├── tests/                      # Automated Contract & Concurrency Tests
-│   └── contract.test.js       # Node.js contract & race condition test suite
+│   └── contract.test.js       # Node.js contract & race condition test suite (9 tests)
 ├── deploy/                     # Deployment configs, SQL schemas & env templates
 ├── docs/                       # Complete documentation suite
 └── package.json                # Monorepo workspaces root configuration
@@ -96,7 +105,7 @@ Car - Travel and Rental/
 ## ⚡ Quick Start
 
 ### Prerequisites
-- Node.js 18+ (tested on Node.js 20/22)
+- Node.js 18+ (tested on Node.js 20/22/24)
 - npm 9+
 
 ### Installation

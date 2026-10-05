@@ -111,3 +111,67 @@ Both the Express REST backend (`server/src/server.js`) and the Supabase Business
 ### Consequences
 - **Pros:** Passengers immediately see updated seat layouts without requiring manual schedule deletion and re-creation.
 - **Cons:** Cascade writes update multiple rows; mitigated by indexing on `schedules(armada_id)` and infrequent fleet edits.
+
+---
+
+## ADR 006: Layered Architecture Decomposition for Production Server & Frontends
+
+### Status
+**Accepted** (2026-10-05)
+
+### Context
+As features expanded (customer CRM, analytics, armadas, timelines, JWT auth), `server/src/server.js` grew past 1,211 lines and `business/src/App.jsx` past 1,865 lines. Monolithic source files made onboarding, unit testing, maintenance, and bug isolation increasingly difficult.
+
+### Decision
+1. **Layered Backend Modularization:**
+   - Decompose `server/src/server.js` into standard layered folders:
+     - `server/src/config/env.js`: Centralized environment configurations.
+     - `server/src/middleware/auth.js`: JWT signing, verification, and `requireOperator` middleware.
+     - `server/src/websocket.js`: Isolated WebSocket server and broadcast hub.
+     - `server/src/routes/`: Route modules (`auth`, `spots`, `schedules`, `armadas`, `bookings`, `customers`, `analytics`, `timeline`).
+   - The root `server/src/server.js` is reduced to an 82-line coordinator mounting middleware and routers.
+2. **Frontend Domain Tab Decomposition:**
+   - In `business/`: Extract `Navbar.jsx`, `ToastContainer.jsx`, and domain tab components (`OrdersTab.jsx`, `SchedulesTab.jsx`, `ArmadasTab.jsx`, `CustomersTab.jsx`, `AnalyticsTab.jsx`). `App.jsx` is reduced to a clean 425-line coordinator.
+   - In `client/`: Extract `ClientHeader.jsx`, `SearchHero.jsx`, and `MyBookingsModal.jsx`. `App.jsx` is reduced to 330 lines.
+
+### Consequences
+- **Pros:** Clear separation of concerns, higher code maintainability, faster debugging, clean git diffs, zero breaking changes to public contracts (verified by 100% test pass rate).
+- **Cons:** More files in the directory structure.
+
+---
+
+## ADR 007: Monorepo Shared Package (`@antarpool/shared`) with Vite Aliases
+
+### Status
+**Accepted** (2026-10-05)
+
+### Context
+Formatters (`formatIDR`, `formatDateID`) and phone validators were redundantly duplicated between `client`, `business`, and `server`. A dedicated `shared/` workspace package existed but was underutilized because bundling local packages across Vite monorepos often requires complex symlinking or rebuild steps.
+
+### Decision
+1. Consolidated all common business validators (`isValidNIK`, `isValidIndonesianPhone`, `isValidEmail`), phone normalizers (`normalizePhoneNumber`, `formatLocalPhone`), and presets (`COMMON_CITIES`, `VEHICLE_PRESETS`) into `shared/src/index.js`.
+2. Configured Vite resolve aliases in `business/vite.config.js` and `client/vite.config.js` pointing `@antarpool/shared` directly to `../shared/src/index.js`.
+3. Re-exported shared utilities in `business/src/utils.js` and `client/src/utils.js` for seamless backwards compatibility.
+
+### Consequences
+- **Pros:** Single source of truth for business rules and formatting; zero compilation delay in Vite dev or production builds.
+- **Cons:** None.
+
+---
+
+## ADR 008: Passenger Identity Enrichment (NIK, Domisili) & Hybrid CRM Fallback
+
+### Status
+**Accepted** (2026-10-05)
+
+### Context
+For road passenger manifests and passenger management, operators need to know passengers' domicile cities and 16-digit National ID (NIK). Additionally, when deploying the Business App against a Supabase instance where `customers` table migration has not yet been executed, the app previously experienced silent CRM failures.
+
+### Decision
+1. Added `city` (domicile) and `id_card` (NIK) to both the `customers` directory and passenger bookings. Added `POST /api/customers/profile` and client `ProfileModal.jsx` allowing passengers to edit these details.
+2. Implemented a **Hybrid Fallback Mechanism** in `business/src/adapters/supabaseAdapter.js`: if query to Supabase `customers` returns error `42P01` (table does not exist), the adapter automatically synthesizes customer profiles from historical `bookings` and persists operator notes and VIP flags in browser `localStorage`.
+3. Added `ConnectionModal.jsx` and top-bar status indicator badges informing the operator whether CRM is in Live Supabase mode, Fallback mode, or Express REST mode.
+
+### Consequences
+- **Pros:** Seamless operational continuity even before remote database migration; passengers can self-register their ID and city attributes.
+- **Cons:** In fallback mode, VIP notes are local to the operator's browser until the Supabase SQL migration is run.

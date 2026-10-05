@@ -4,8 +4,8 @@
 
 AntarPool explicitly separates two operational targets using a unified codebase and the **Adapter Pattern**:
 
-1. **Demo Target (Supabase / Vercel / Netlify):** Zero-cost serverless prototype for public showcase. Uses Supabase PostgreSQL directly via `@supabase/supabase-js` and Supabase Realtime for order alerts.
-2. **Production Target (Custom Server / Self-Hosted):** High-reliability target with server-enforced business rules, JWT authentication, atomic concurrency locks, and payment/webhook readiness. Uses `server/src/server.js` (Express + SQLite with WAL mode + WebSockets).
+1. **Demo Target (Supabase / Vercel / Netlify):** Zero-cost serverless prototype for public showcase. Uses Supabase PostgreSQL directly via `@supabase/supabase-js` and Supabase Realtime for order alerts. Includes a hybrid fallback mechanism if dedicated CRM tables are not yet migrated in Supabase.
+2. **Production Target (Custom Server / Self-Hosted):** High-reliability target with server-enforced business rules, JWT authentication, atomic concurrency locks, and payment/webhook readiness. Uses `server/src/server.js` (Express + SQLite with WAL mode + WebSockets) organized into modular route controllers and middleware.
 
 ```mermaid
 flowchart TD
@@ -14,12 +14,18 @@ flowchart TD
     Business["Business App (Operator)<br/>Vite :5174"]
   end
 
+  subgraph Shared Package
+    Shared["@antarpool/shared<br/>Validators | Formatters | Presets"]
+  end
+
   subgraph Data Layer ["api.js (Dynamic Adapter Dispatch)"]
     Switch{"VITE_BACKEND<br/>'supabase' | 'rest'"}
     SubA["supabaseAdapter.js"]
     RestA["restAdapter.js"]
   end
 
+  Client --> Shared
+  Business --> Shared
   Client --> Switch
   Business --> Switch
   Switch -->|Demo Target| SubA
@@ -48,8 +54,8 @@ export const adapter = activeBackend === 'supabase' ? supabaseAdapter : restAdap
 ```
 
 Both adapters adhere to an identical contract and method signatures:
-- In `client/`: `getSpots()`, `getSchedules(...)`, `createBooking(...)`, `lookupBookings(...)`, `cancelBooking(...)`
-- In `business/`: `getBusinessBookings(...)`, `getArmadas()`, `getSpots()`, `getBusinessSchedules(...)`, `updateBookingStatus(...)`, `saveSchedule(...)`, `deleteSchedule(...)`, `saveArmada(...)`, `deleteArmada(...)`, `getTimeline()`, `getAnalytics()`
+- In `client/`: `getSpots()`, `getSchedules(...)`, `createBooking(...)`, `lookupBookings(...)`, `cancelBooking(...)`, `updateProfile(...)`
+- In `business/`: `getBusinessBookings(...)`, `getArmadas()`, `getSpots()`, `getBusinessSchedules(...)`, `updateBookingStatus(...)`, `saveSchedule(...)`, `deleteSchedule(...)`, `saveArmada(...)`, `deleteArmada(...)`, `getTimeline()`, `getAnalytics()`, `getCustomers()`, `updateCustomer(...)`
 
 ## Code Map
 
@@ -57,9 +63,9 @@ Both adapters adhere to an identical contract and method signatures:
 antarpool-travel/
 ├── package.json              # Monorepo root with npm workspaces (client, business, server, shared)
 ├── tests/
-│   └── contract.test.js      # Automated contract & concurrency test suite (Node test runner)
+│   └── contract.test.js      # Automated contract & concurrency test suite (Node test runner, 9 tests)
 ├── shared/                   # Shared monorepo package (@antarpool/shared)
-│   └── src/index.js          # Shared currency (formatIDR) and date formatters
+│   └── src/index.js          # Shared IDR/date formatters, phone normalizer, NIK & email validators
 ├── client/                   # Passenger Booking Web App (Port 5173)
 │   ├── src/
 │   │   ├── adapters/
@@ -67,10 +73,14 @@ antarpool-travel/
 │   │   │   └── restAdapter.js
 │   │   ├── api.js            # Unified contract dispatcher
 │   │   ├── components/
-│   │   │   ├── AuthModal.jsx
+│   │   │   ├── ClientHeader.jsx    # Responsive brand header, 'Tiket Saya', Profile & Auth pill
+│   │   │   ├── SearchHero.jsx      # Origin/Destination selector & date picker hero card
+│   │   │   ├── MyBookingsModal.jsx # Passenger ticket lookup drawer & cancellation
 │   │   │   ├── InteractiveSeatMap.jsx
-│   │   │   └── TicketPass.jsx
-│   │   └── App.jsx
+│   │   │   ├── TicketPass.jsx
+│   │   │   ├── AuthModal.jsx
+│   │   │   └── ProfileModal.jsx    # Domicile city & 16-digit NIK profile management
+│   │   └── App.jsx           # Clean coordinator shell (< 350 LOC)
 ├── business/                 # Operator Admin Dashboard (Port 5174)
 │   ├── src/
 │   │   ├── adapters/
@@ -78,16 +88,40 @@ antarpool-travel/
 │   │   │   └── restAdapter.js
 │   │   ├── api.js            # Unified contract dispatcher
 │   │   ├── components/
-│   │   │   ├── LoginGate.jsx # Authenticates against /api/business/login in REST mode
+│   │   │   ├── Navbar.jsx          # Top brand bar, connection indicator, voice controls, tabs
+│   │   │   ├── ToastContainer.jsx  # Floating alert & Indonesian voice announcement toasts
+│   │   │   ├── tabs/
+│   │   │   │   ├── OrdersTab.jsx    # Live bookings stream, status filters, payment verification
+│   │   │   │   ├── SchedulesTab.jsx # Timetable, live seat remaining per date, trip editor
+│   │   │   │   ├── ArmadasTab.jsx   # Fleet list & interactive cabin layout preview
+│   │   │   │   ├── CustomersTab.jsx # CRM directory, VIP/blacklisted chips, WhatsApp links
+│   │   │   │   └── AnalyticsTab.jsx # Revenue KPIs, top routes, departure distributions
+│   │   │   ├── OrderTimeline.jsx   # Real-time lifecycle audit trail
+│   │   │   ├── LoginGate.jsx       # Authenticates against /api/business/login in REST mode
 │   │   │   ├── ScheduleModal.jsx
 │   │   │   ├── ArmadaModal.jsx
-│   │   │   └── OrderTimeline.jsx
-│   │   ├── voiceNotifier.js  # Indonesian Web Speech + audio chime
-│   │   └── App.jsx
-├── server/                   # Production Backend Server (Port 5000)
+│   │   │   ├── CustomerModal.jsx   # CRM customer editor & ticket history drawer
+│   │   │   └── ConnectionModal.jsx # Live connection inspector & SQL guide modal
+│   │   ├── voiceNotifier.js        # Indonesian Web Speech + audio chime
+│   │   └── App.jsx                 # Clean coordinator shell (< 450 LOC)
+├── server/                   # Production Layered Backend Server (Port 5000)
 │   ├── src/
+│   │   ├── config/
+│   │   │   └── env.js        # Environment configuration defaults (PORT, DB_PATH, JWT_SECRET)
+│   │   ├── middleware/
+│   │   │   └── auth.js       # JWT generation and requireOperator middleware
+│   │   ├── routes/
+│   │   │   ├── auth.js       # POST /api/business/login
+│   │   │   ├── spots.js      # /api/spots
+│   │   │   ├── schedules.js  # /api/schedules, /api/business/schedules
+│   │   │   ├── armadas.js    # /api/armadas
+│   │   │   ├── bookings.js   # /api/bookings, atomic reservations & cancellations
+│   │   │   ├── customers.js  # /api/customers/profile, /api/business/customers
+│   │   │   ├── analytics.js  # /api/business/analytics
+│   │   │   └── timeline.js   # /api/business/timeline
+│   │   ├── websocket.js      # WebSocket server hub & broadcastToBusiness
 │   │   ├── db.js             # SQLite WAL mode, withTransaction mutex, booking_seats table
-│   │   └── server.js         # Express REST API, JWT auth, requireOperator, atomic bookings, WebSockets
+│   │   └── server.js         # Lean main entrypoint (82 LOC)
 │   ├── test_integration.py   # Python integration test script
 │   └── travel.db             # Local SQLite database
 └── docs/                     # Documentation suite
@@ -98,5 +132,4 @@ antarpool-travel/
 Double booking is prevented at the database level in both targets:
 1. **`booking_seats` Table:** Stores one row per reserved seat (`schedule_id`, `travel_date`, `seat_number`, `status`).
 2. **Partial Unique Index:** `UNIQUE(schedule_id, travel_date, seat_number) WHERE status != 'CANCELLED'`.
-3. **Serialized Locking (`withTransaction`):** In the Node.js production server, an asynchronous mutex synchronizes concurrent booking requests, executing them under `BEGIN IMMEDIATE ... COMMIT`. If any seat is taken or violates the index, a `409 Conflict` status is immediately returned with the colliding seats.
-4. **Cancellation:** When an order is cancelled by the passenger or operator, `status` in `booking_seats` is updated to `'CANCELLED'`, instantaneously releasing the seat for re-booking without deleting the audit trail.
+3. **Supabase Concurrency Handling:** Caught PostgreSQL error code `23505` on `idx_supabase_unique_active_seat` with automatic rollback of conflicting bookings.

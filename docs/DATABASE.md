@@ -9,6 +9,7 @@ erDiagram
   schedules ||--o{ bookings : "schedule_id (CASCADE)"
   bookings ||--o{ order_timeline_events : "booking_id (CASCADE)"
   bookings ||--o{ booking_seats : "booking_id (CASCADE)"
+  customers ||--o{ bookings : "customer_phone"
 ```
 
 ## Tables & Schema
@@ -49,6 +50,8 @@ Passenger travel reservations.
 - `schedule_id`: Trip reference
 - `travel_date`: Date string `YYYY-MM-DD`
 - `customer_name`, `customer_phone`, `customer_email`, `auth_method`
+- `customer_city`: Passenger domicile city (e.g. `Surabaya`)
+- `customer_id_card`: Passenger 16-digit Indonesian NIK
 - `seat_numbers`: JSON array of booked seats (e.g. `["1A", "2B"]`)
 - `seats_count`: Count of seats
 - `price_per_seat`, `total_price`: Verified fare
@@ -91,6 +94,8 @@ Directory of passenger accounts and operational CRM attributes.
 - `phone`: Unique identifier / WhatsApp contact (Indexed)
 - `name`: Passenger full name
 - `email`: Passenger email (optional)
+- `city`: Domicile city (e.g. `Surabaya`, `Malang`, `Sidoarjo`)
+- `id_card`: 16-digit Indonesian National ID (NIK)
 - `auth_method`: Authentication provider (`'phone'`, `'email'`, `'google'`)
 - `is_vip`: Boolean flag (1/0) indicating VIP passenger status
 - `is_blacklisted`: Boolean flag (1/0) indicating repeat no-show or problematic booking history
