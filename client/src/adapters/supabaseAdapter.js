@@ -158,7 +158,7 @@ export async function createBooking(payload) {
 
   if (insertErr) throw insertErr;
 
-  // Insert reserved seats into booking_seats
+  // Insert reserved seats into booking_seats atomically
   try {
     const seatRows = seat_numbers.map((seat) => ({
       booking_id: inserted.id,
@@ -167,8 +167,20 @@ export async function createBooking(payload) {
       seat_number: seat,
       status: 'CONFIRMED'
     }));
-    await supabase.from('booking_seats').insert(seatRows);
-  } catch (e) {}
+    const { error: seatErr } = await supabase.from('booking_seats').insert(seatRows);
+    if (seatErr) {
+      if (seatErr.code === '23505' || seatErr.message?.includes('duplicate key') || seatErr.message?.includes('idx_supabase_unique_active_seat')) {
+        // Rollback inserted booking due to concurrent seat conflict
+        await supabase
+          .from('bookings')
+          .update({ booking_status: 'CANCELLED', payment_status: 'CANCELLED' })
+          .eq('id', inserted.id);
+        throw new Error('Salah satu kursi yang Anda pilih baru saja dipesan oleh penumpang lain.');
+      }
+    }
+  } catch (e) {
+    if (e.message?.includes('baru saja dipesan')) throw e;
+  }
 
   // Log timeline event
   try {

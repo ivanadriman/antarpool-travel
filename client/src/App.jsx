@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  MapPin, Calendar, Clock, Users, ArrowRight, CheckCircle2, 
-  AlertTriangle, Car, Shield, User, LogOut, Ticket, Phone, ChevronRight, XCircle 
+  MapPin, Clock, ArrowRight, 
+  AlertTriangle, Car, Shield 
 } from 'lucide-react';
+import ClientHeader from './components/ClientHeader';
+import SearchHero from './components/SearchHero';
+import MyBookingsModal from './components/MyBookingsModal';
 import AuthModal from './components/AuthModal';
 import ProfileModal from './components/ProfileModal';
 import InteractiveSeatMap from './components/InteractiveSeatMap';
 import TicketPass from './components/TicketPass';
-import { formatIDR, formatDateID } from './utils';
+import { formatIDR } from './utils';
 import { getSpots, getSchedules, createBooking, lookupBookings, cancelBooking } from './api';
 
 export default function App() {
@@ -47,14 +50,14 @@ export default function App() {
   const [myBookings, setMyBookings] = useState([]);
   const [showMyBookings, setShowMyBookings] = useState(false);
 
-  // 1. Fetch pooling spots on load
+  // Fetch pooling spots on load
   useEffect(() => {
     getSpots()
       .then((data) => setSpots(Array.isArray(data) ? data : []))
       .catch((err) => console.error('Failed to load pooling spots:', err));
   }, []);
 
-  // 2. Search schedules
+  // Search schedules
   const handleSearch = async (e) => {
     if (e) e.preventDefault();
     if (!originSpotId || !destSpotId) return;
@@ -76,7 +79,7 @@ export default function App() {
     }
   };
 
-  // Run search when spots or date are first set
+  // Run search when spots or date are updated
   useEffect(() => {
     if (originSpotId && destSpotId) {
       handleSearch();
@@ -94,7 +97,7 @@ export default function App() {
     });
   };
 
-  // 3. Confirm Booking
+  // Confirm Booking
   const handleBookNow = async () => {
     if (!currentUser) {
       setIsAuthOpen(true);
@@ -141,7 +144,7 @@ export default function App() {
     }
   };
 
-  // 4. Fetch my bookings
+  // Fetch my bookings
   const loadMyBookings = async () => {
     if (!currentUser) return;
     try {
@@ -153,7 +156,7 @@ export default function App() {
     }
   };
 
-  // 4b. Cancel booking
+  // Cancel booking
   const handleCancelBooking = async (bookingId, bookingCode) => {
     if (!window.confirm(`Apakah Anda yakin ingin membatalkan pesanan tiket ${bookingCode}? Kursi yang Anda pilih akan dilepaskan.`)) {
       return;
@@ -191,186 +194,32 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans">
       {/* Top Navbar */}
-      <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-md shadow-blue-500/20">
-              <Car className="w-5 h-5" />
-            </div>
-            <div>
-              <span className="font-extrabold text-lg text-slate-900 tracking-tight">AntarPool</span>
-              <span className="ml-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-                Travel
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2 sm:gap-3">
-            {currentUser ? (
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <button
-                  onClick={loadMyBookings}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
-                >
-                  <Ticket className="w-3.5 h-3.5 text-blue-600" />
-                  <span className="hidden sm:inline">Tiket Saya</span>
-                </button>
-
-                <button
-                  onClick={() => setIsProfileOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 hover:border-blue-200 border border-slate-200 text-xs transition cursor-pointer text-slate-800"
-                  title="Klik untuk melihat dan mengubah profil Anda"
-                >
-                  <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-                  <span className="font-bold max-w-[90px] sm:max-w-[130px] truncate">
-                    {currentUser.name}
-                  </span>
-                  <span className="text-[10px] text-blue-600 font-semibold bg-blue-100/70 px-1.5 py-0.5 rounded-md hidden xs:inline">
-                    Profil
-                  </span>
-                </button>
-
-                <button
-                  onClick={handleLogout}
-                  title="Keluar"
-                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setIsAuthOpen(true)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold rounded-xl shadow-xs transition cursor-pointer flex items-center gap-1.5"
-              >
-                <User className="w-4 h-4" />
-                Masuk / Daftar
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
+      <ClientHeader
+        currentUser={currentUser}
+        onOpenMyBookings={loadMyBookings}
+        onOpenProfile={() => setIsProfileOpen(true)}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onLogout={handleLogout}
+      />
 
       {/* Hero & Route Search Card */}
       <main className="flex-1 max-w-5xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
-        {/* Banner */}
-        <div className="bg-gradient-to-r from-blue-600 via-indigo-600 to-sky-600 rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden">
-          <div className="relative z-10 max-w-xl">
-            <span className="px-3 py-1 rounded-full bg-white/20 text-xs font-semibold uppercase tracking-wider backdrop-blur-xs">
-              Antar Pool ke Pool Nyaman & Pasti
-            </span>
-            <h1 className="text-2xl sm:text-3xl font-black mt-2 leading-tight">
-              Pesan Tiket Travel Mobil Antar Kota
-            </h1>
-            <p className="text-blue-100 text-sm mt-1.5">
-              Pilih pool terdekat, tentukan jam berangkat dan kursi favorit Anda. Bayar aman saat tiba di pool keberangkatan!
-            </p>
-          </div>
-
-          <div className="absolute right-4 -bottom-6 opacity-15 hidden md:block select-none">
-            <Car className="w-56 h-56" />
-          </div>
-        </div>
-
-        {/* Route & Date Picker Card */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Origin Pooling Spot */}
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Pool Keberangkatan (Asal)
-              </label>
-              <div className="relative">
-                <MapPin className="w-5 h-5 text-blue-600 absolute left-3 top-3 pointer-events-none" />
-                <select
-                  value={originSpotId}
-                  onChange={(e) => {
-                    const newOrigin = e.target.value;
-                    setOriginSpotId(newOrigin);
-                    // If the current arrival pool is the same as new origin, reset arrival pool
-                    if (destSpotId === newOrigin) {
-                      setDestSpotId('');
-                      setSchedules([]);
-                      setSelectedSchedule(null);
-                      setSelectedSeats([]);
-                    }
-                  }}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer"
-                >
-                  <option value="">-- Pilih Pool Keberangkatan --</option>
-                  {spots.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.city} - {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {originSpot ? (
-                <p className="text-[11px] text-slate-500 mt-1 truncate">{originSpot.address}</p>
-              ) : (
-                <p className="text-[11px] text-blue-600 mt-1 font-medium">Pilih titik awal keberangkatan Anda</p>
-              )}
-            </div>
-
-            {/* Destination Pooling Spot */}
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5 flex items-center justify-between">
-                <span>Pool Kedatangan (Tujuan)</span>
-                {!originSpotId && (
-                  <span className="text-[10px] text-amber-600 font-normal">Pilih asal dahulu</span>
-                )}
-              </label>
-              <div className="relative">
-                <MapPin className={`w-5 h-5 absolute left-3 top-3 pointer-events-none ${originSpotId ? 'text-indigo-600' : 'text-slate-300'}`} />
-                <select
-                  value={destSpotId}
-                  disabled={!originSpotId}
-                  onChange={(e) => setDestSpotId(e.target.value)}
-                  className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm font-semibold border transition focus:outline-hidden ${
-                    originSpotId
-                      ? 'bg-slate-50 border-slate-300 text-slate-800 focus:ring-2 focus:ring-blue-500 focus:bg-white cursor-pointer'
-                      : 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                  }`}
-                >
-                  <option value="">
-                    {originSpotId ? '-- Pilih Pool Tujuan --' : '-- Pilih Pool Asal Terlebih Dahulu --'}
-                  </option>
-                  {spots.map((s) => {
-                    const isSameAsOrigin = String(s.id) === String(originSpotId);
-                    return (
-                      <option key={s.id} value={s.id} disabled={isSameAsOrigin}>
-                        {s.city} - {s.name} {isSameAsOrigin ? '(Sama dengan asal)' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              {destSpot ? (
-                <p className="text-[11px] text-slate-500 mt-1 truncate">{destSpot.address}</p>
-              ) : originSpotId ? (
-                <p className="text-[11px] text-slate-400 mt-1">Pilih pool tujuan perjalanan Anda</p>
-              ) : null}
-            </div>
-
-            {/* Departure Date */}
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1.5">
-                Tanggal Keberangkatan
-              </label>
-              <div className="relative">
-                <Calendar className="w-5 h-5 text-slate-400 absolute left-3 top-3 pointer-events-none" />
-                <input
-                  type="date"
-                  value={travelDate}
-                  min={new Date().toISOString().split('T')[0]}
-                  onChange={(e) => setTravelDate(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm font-semibold text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-blue-500 focus:bg-white"
-                />
-              </div>
-              <p className="text-[11px] text-slate-500 mt-1">{formatDateID(travelDate)}</p>
-            </div>
-          </div>
-        </div>
+        <SearchHero
+          spots={spots}
+          originSpotId={originSpotId}
+          setOriginSpotId={setOriginSpotId}
+          destSpotId={destSpotId}
+          setDestSpotId={setDestSpotId}
+          travelDate={travelDate}
+          setTravelDate={setTravelDate}
+          originSpot={originSpot}
+          destSpot={destSpot}
+          onResetSelection={() => {
+            setSchedules([]);
+            setSelectedSchedule(null);
+            setSelectedSeats([]);
+          }}
+        />
 
         {/* Schedules & Time Slot Options */}
         <div className="space-y-4">
@@ -492,7 +341,7 @@ export default function App() {
               vehicleLayout={selectedSchedule.vehicle_layout}
             />
 
-            {/* Warning if no seats selected */}
+            {/* Warning if error exists */}
             {bookingError && (
               <div className="p-3.5 bg-red-50 border border-red-200 rounded-xl text-xs text-red-700 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-red-600 shrink-0" />
@@ -568,98 +417,17 @@ export default function App() {
       )}
 
       {/* My Bookings Modal */}
-      {showMyBookings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden p-6">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-slate-800">Tiket Perjalanan Saya</h3>
-                <p className="text-xs text-slate-500">Nomor: {currentUser?.phone || currentUser?.email}</p>
-              </div>
-              <button
-                onClick={() => setShowMyBookings(false)}
-                className="text-slate-400 hover:text-slate-700 font-bold text-sm px-2 py-1 rounded-lg"
-              >
-                Tutup
-              </button>
-            </div>
-
-            <div className="max-h-[60vh] overflow-y-auto space-y-3">
-              {myBookings.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-sm">
-                  Belum ada riwayat pesanan.
-                </div>
-              ) : (
-                myBookings.map((b) => (
-                  <div
-                    key={b.id}
-                    onClick={() => {
-                      setShowMyBookings(false);
-                      setActiveTicket(b);
-                    }}
-                    className={`p-4 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
-                      b.booking_status === 'CANCELLED' || b.payment_status === 'CANCELLED'
-                        ? 'border-slate-200 bg-slate-50/70 hover:border-slate-300'
-                        : 'border-slate-200 hover:border-blue-500 hover:bg-blue-50/40'
-                    }`}
-                  >
-                    <div>
-                      <span className={`text-xs font-bold ${
-                        b.booking_status === 'CANCELLED' || b.payment_status === 'CANCELLED' ? 'text-slate-400' : 'text-blue-600'
-                      }`}>{b.booking_code}</span>
-                      <p className={`font-bold text-sm mt-0.5 ${
-                        b.booking_status === 'CANCELLED' || b.payment_status === 'CANCELLED' ? 'line-through text-slate-400' : 'text-slate-800'
-                      }`}>
-                        {b.origin_name} → {b.destination_name}
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        {formatDateID(b.travel_date)} • {b.departure_time} WIB
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <span className={`text-xs font-bold ${
-                          b.booking_status === 'CANCELLED' || b.payment_status === 'CANCELLED' ? 'line-through text-slate-400' : 'text-slate-800'
-                        }`}>{formatIDR(b.total_price)}</span>
-                        <span
-                          className={`block text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 ${
-                            b.booking_status === 'CANCELLED' || b.payment_status === 'CANCELLED'
-                              ? 'bg-red-100 text-red-700'
-                              : b.payment_status === 'PAID'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : 'bg-amber-100 text-amber-700'
-                          }`}
-                        >
-                          {b.booking_status === 'CANCELLED' || b.payment_status === 'CANCELLED'
-                            ? 'Dibatalkan'
-                            : b.payment_status === 'PAID'
-                            ? 'Sudah Lunas'
-                            : 'Menunggu Bayar di Pool'}
-                        </span>
-                      </div>
-
-                      {/* Batalkan Tiket Button */}
-                      {b.booking_status !== 'CANCELLED' && b.payment_status !== 'CANCELLED' && b.booking_status !== 'COMPLETED' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCancelBooking(b.id, b.booking_code);
-                          }}
-                          className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 border border-red-200 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer shrink-0"
-                          title="Batalkan Tiket"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          <span className="hidden sm:inline">Batalkan</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <MyBookingsModal
+        isOpen={showMyBookings}
+        onClose={() => setShowMyBookings(false)}
+        currentUser={currentUser}
+        myBookings={myBookings}
+        onSelectTicket={(ticket) => {
+          setShowMyBookings(false);
+          setActiveTicket(ticket);
+        }}
+        onCancelBooking={handleCancelBooking}
+      />
 
       {/* Passenger Profile Modal */}
       <ProfileModal
