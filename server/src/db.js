@@ -225,6 +225,8 @@ export async function initDb() {
       phone TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
       email TEXT,
+      city TEXT DEFAULT '',
+      id_card TEXT DEFAULT '',
       auth_method TEXT DEFAULT 'phone',
       is_vip INTEGER DEFAULT 0,
       is_blacklisted INTEGER DEFAULT 0,
@@ -237,6 +239,16 @@ export async function initDb() {
   await dbRun(`
     CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone)
   `);
+
+  // Migrate existing customers table if city/id_card columns are missing
+  const customerColumns = await dbAll('PRAGMA table_info(customers)');
+  const colNames = customerColumns.map((c) => c.name);
+  if (!colNames.includes('city')) {
+    await dbRun("ALTER TABLE customers ADD COLUMN city TEXT DEFAULT ''");
+  }
+  if (!colNames.includes('id_card')) {
+    await dbRun("ALTER TABLE customers ADD COLUMN id_card TEXT DEFAULT ''");
+  }
 
   // Backfill existing bookings into customers if empty
   const customersCount = await dbGet('SELECT COUNT(*) as count FROM customers');
@@ -456,7 +468,24 @@ export async function initDb() {
 // CUSTOMER CRM & MANAGEMENT HELPERS
 // ==========================================
 
-export const upsertCustomer = async ({ phone, name, email, auth_method }) => {
+export const upsertCustomer = async (dataOrPhone, nameArg, emailArg, authArg, cityArg, idCardArg) => {
+  let phone, name, email, auth_method, city, id_card;
+  if (typeof dataOrPhone === 'object' && dataOrPhone !== null) {
+    phone = dataOrPhone.phone;
+    name = dataOrPhone.name;
+    email = dataOrPhone.email;
+    auth_method = dataOrPhone.auth_method || dataOrPhone.method;
+    city = dataOrPhone.city;
+    id_card = dataOrPhone.id_card;
+  } else {
+    phone = dataOrPhone;
+    name = nameArg;
+    email = emailArg;
+    auth_method = authArg;
+    city = cityArg;
+    id_card = idCardArg;
+  }
+
   if (!phone) return null;
   const existing = await dbGet('SELECT id FROM customers WHERE phone = ?', [phone]);
   if (existing) {
@@ -465,16 +494,25 @@ export const upsertCustomer = async ({ phone, name, email, auth_method }) => {
        SET name = COALESCE(NULLIF(?, ''), name),
            email = COALESCE(NULLIF(?, ''), email),
            auth_method = COALESCE(NULLIF(?, ''), auth_method),
+           city = CASE WHEN ? IS NOT NULL AND ? != '' THEN ? ELSE city END,
+           id_card = CASE WHEN ? IS NOT NULL AND ? != '' THEN ? ELSE id_card END,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = ?`,
-      [name || null, email || null, auth_method || null, existing.id]
+      [
+        name || null,
+        email || null,
+        auth_method || null,
+        city ?? null, city ?? null, city ?? null,
+        id_card ?? null, id_card ?? null, id_card ?? null,
+        existing.id
+      ]
     );
     return existing.id;
   } else {
     const res = await dbRun(
-      `INSERT INTO customers (phone, name, email, auth_method)
-       VALUES (?, ?, ?, ?)`,
-      [phone, name || 'Pelanggan', email || '', auth_method || 'phone']
+      `INSERT INTO customers (phone, name, email, auth_method, city, id_card)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [phone, name || 'Pelanggan', email || '', auth_method || 'phone', city || '', id_card || '']
     );
     return res.lastID;
   }
@@ -483,7 +521,7 @@ export const upsertCustomer = async ({ phone, name, email, auth_method }) => {
 export const getEnrichedCustomers = async () => {
   const rows = await dbAll(`
     SELECT 
-      c.id, c.phone, c.name, c.email, c.auth_method, c.is_vip, c.is_blacklisted, c.notes, c.created_at, c.updated_at,
+      c.id, c.phone, c.name, c.email, c.city, c.id_card, c.auth_method, c.is_vip, c.is_blacklisted, c.notes, c.created_at, c.updated_at,
       COUNT(b.id) as total_trips,
       SUM(CASE WHEN b.booking_status != 'CANCELLED' THEN 1 ELSE 0 END) as completed_trips,
       SUM(CASE WHEN b.booking_status = 'CANCELLED' THEN 1 ELSE 0 END) as cancelled_trips,
@@ -516,11 +554,13 @@ export const getCustomerBookings = async (phone) => {
   `, [phone]);
 };
 
-export const updateCustomerRecord = async (id, { name, email, is_vip, is_blacklisted, notes }) => {
+export const updateCustomerRecord = async (id, { name, email, city, id_card, is_vip, is_blacklisted, notes }) => {
   const fields = [];
   const params = [];
   if (name !== undefined) { fields.push('name = ?'); params.push(name); }
   if (email !== undefined) { fields.push('email = ?'); params.push(email); }
+  if (city !== undefined) { fields.push('city = ?'); params.push(city); }
+  if (id_card !== undefined) { fields.push('id_card = ?'); params.push(id_card); }
   if (is_vip !== undefined) { fields.push('is_vip = ?'); params.push(is_vip ? 1 : 0); }
   if (is_blacklisted !== undefined) { fields.push('is_blacklisted = ?'); params.push(is_blacklisted ? 1 : 0); }
   if (notes !== undefined) { fields.push('notes = ?'); params.push(notes); }

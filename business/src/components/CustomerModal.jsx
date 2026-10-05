@@ -18,7 +18,9 @@ import {
   Loader2,
   ExternalLink,
   Info,
-  Check
+  Check,
+  MapPin,
+  CreditCard
 } from 'lucide-react';
 import { formatIDR, formatIndonesianDate } from '../utils';
 import { getCustomerBookings, updateCustomer } from '../api';
@@ -29,6 +31,10 @@ export default function CustomerModal({
   customer,
   onCustomerUpdated
 }) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [city, setCity] = useState('');
+  const [idCard, setIdCard] = useState('');
   const [isVip, setIsVip] = useState(false);
   const [isBlacklisted, setIsBlacklisted] = useState(false);
   const [notes, setNotes] = useState('');
@@ -42,6 +48,10 @@ export default function CustomerModal({
 
   useEffect(() => {
     if (isOpen && customer) {
+      setName(customer.name || '');
+      setEmail(customer.email || '');
+      setCity(customer.city || '');
+      setIdCard(customer.id_card || '');
       setIsVip(Boolean(customer.is_vip));
       setIsBlacklisted(Boolean(customer.is_blacklisted));
       setNotes(customer.notes || '');
@@ -78,7 +88,7 @@ export default function CustomerModal({
 
   const cleanWaNumber = getCleanWaNumber(customer.phone);
   const waGreeting = encodeURIComponent(
-    `Halo Bapak/Ibu ${customer.name}, kami dari tim layanan AntarPool Travel. Terkait perjalanan Anda...`
+    `Halo Bapak/Ibu ${name || customer.name}, kami dari tim layanan AntarPool Travel. Terkait perjalanan Anda...`
   );
   const waUrl = cleanWaNumber ? `https://wa.me/${cleanWaNumber}?text=${waGreeting}` : '#';
 
@@ -90,6 +100,10 @@ export default function CustomerModal({
 
     try {
       const res = await updateCustomer(customer.id, {
+        name: name.trim(),
+        email: email.trim(),
+        city: city.trim(),
+        id_card: idCard.trim(),
         is_vip: isVip,
         is_blacklisted: isBlacklisted,
         notes: notes.trim(),
@@ -110,6 +124,10 @@ export default function CustomerModal({
         if (onCustomerUpdated) {
           onCustomerUpdated({
             ...customer,
+            name: name.trim(),
+            email: email.trim(),
+            city: city.trim(),
+            id_card: idCard.trim(),
             is_vip: isVip,
             is_blacklisted: isBlacklisted,
             notes: notes.trim()
@@ -167,10 +185,22 @@ export default function CustomerModal({
                   <Phone className="w-3 h-3 text-slate-400" />
                   {customer.phone || 'Tanpa nomor HP'}
                 </span>
-                {customer.email && (
+                {(email || customer.email) && (
                   <span className="flex items-center gap-1 truncate max-w-[200px]">
                     <Mail className="w-3 h-3 text-slate-400" />
-                    <span className="truncate">{customer.email}</span>
+                    <span className="truncate">{email || customer.email}</span>
+                  </span>
+                )}
+                {(city || customer.city) && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="w-3 h-3 text-slate-400" />
+                    <span>{city || customer.city}</span>
+                  </span>
+                )}
+                {(idCard || customer.id_card) && (
+                  <span className="flex items-center gap-1 font-mono text-[11px]">
+                    <CreditCard className="w-3 h-3 text-slate-400" />
+                    <span>NIK: {idCard || customer.id_card}</span>
                   </span>
                 )}
                 <span className="px-2 py-0.5 rounded bg-white/10 text-[11px] text-slate-200">
@@ -297,6 +327,79 @@ export default function CustomerModal({
                 </div>
               </div>
             )}
+
+            {/* Passenger Profile Edit Section */}
+            <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-2.5">
+              <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">
+                Data Diri & Identitas Penumpang
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                    Nama Lengkap
+                  </label>
+                  <div className="relative">
+                    <User className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="Nama lengkap"
+                      className="w-full pl-8 pr-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                    Alamat Email
+                  </label>
+                  <div className="relative">
+                    <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                    <input
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="nama@email.com"
+                      className="w-full pl-8 pr-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                    Kota Domisili / Asal
+                  </label>
+                  <div className="relative">
+                    <MapPin className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                    <input
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="Surabaya / Malang"
+                      className="w-full pl-8 pr-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                    Nomor KTP / NIK (16 Digit)
+                  </label>
+                  <div className="relative">
+                    <CreditCard className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                    <input
+                      type="text"
+                      maxLength={16}
+                      value={idCard}
+                      onChange={(e) => setIdCard(e.target.value.replace(/\D/g, ''))}
+                      placeholder="16 digit NIK"
+                      className="w-full pl-8 pr-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* VIP Toggle */}

@@ -4,6 +4,7 @@ import {
   AlertTriangle, Car, Shield, User, LogOut, Ticket, Phone, ChevronRight, XCircle 
 } from 'lucide-react';
 import AuthModal from './components/AuthModal';
+import ProfileModal from './components/ProfileModal';
 import InteractiveSeatMap from './components/InteractiveSeatMap';
 import TicketPass from './components/TicketPass';
 import { formatIDR, formatDateID } from './utils';
@@ -20,6 +21,7 @@ export default function App() {
     }
   });
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   // Travel Selection state
   const [spots, setSpots] = useState([]);
@@ -119,6 +121,8 @@ export default function App() {
         customer_name: currentUser.name,
         customer_phone: currentUser.phone || '',
         customer_email: currentUser.email || '',
+        customer_city: currentUser.city || '',
+        customer_id_card: currentUser.id_card || '',
         auth_method: currentUser.method || 'phone',
         seat_numbers: selectedSeats
       });
@@ -203,7 +207,7 @@ export default function App() {
 
           <div className="flex items-center gap-2 sm:gap-3">
             {currentUser ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   onClick={loadMyBookings}
                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer"
@@ -212,19 +216,27 @@ export default function App() {
                   <span className="hidden sm:inline">Tiket Saya</span>
                 </button>
 
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-xs">
-                  <User className="w-3.5 h-3.5 text-slate-500" />
-                  <span className="font-bold text-slate-800 max-w-[100px] sm:max-w-[140px] truncate">
+                <button
+                  onClick={() => setIsProfileOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 hover:border-blue-200 border border-slate-200 text-xs transition cursor-pointer text-slate-800"
+                  title="Klik untuk melihat dan mengubah profil Anda"
+                >
+                  <User className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                  <span className="font-bold max-w-[90px] sm:max-w-[130px] truncate">
                     {currentUser.name}
                   </span>
-                  <button
-                    onClick={handleLogout}
-                    title="Keluar"
-                    className="text-slate-400 hover:text-red-600 ml-1 cursor-pointer"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                  <span className="text-[10px] text-blue-600 font-semibold bg-blue-100/70 px-1.5 py-0.5 rounded-md hidden xs:inline">
+                    Profil
+                  </span>
+                </button>
+
+                <button
+                  onClick={handleLogout}
+                  title="Keluar"
+                  className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
               </div>
             ) : (
               <button
@@ -648,6 +660,16 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Passenger Profile Modal */}
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        currentUser={currentUser}
+        onProfileUpdated={(updated) => {
+          setCurrentUser(updated);
+        }}
+      />
     </div>
   );
 }

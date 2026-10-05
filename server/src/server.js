@@ -441,7 +441,9 @@ app.post('/api/bookings', async (req, res) => {
           phone: customer_phone,
           name: customer_name,
           email: customer_email,
-          auth_method: auth_method || 'phone'
+          auth_method: auth_method || 'phone',
+          city: req.body.customer_city || req.body.city || '',
+          id_card: req.body.customer_id_card || req.body.id_card || ''
         });
       } catch (custErr) {
         console.error('Failed to upsert customer:', custErr);
@@ -1159,11 +1161,36 @@ app.get('/api/business/customers/:phone/bookings', requireOperator, async (req, 
   }
 });
 
+// 14. CLIENT: Passenger Profile Management (View, Add, Update)
+app.post('/api/customers/profile', async (req, res) => {
+  try {
+    const { phone, name, email, auth_method, method, city, id_card } = req.body;
+    if (!phone) {
+      return res.status(400).json({ error: 'Nomor WhatsApp / HP wajib diisi' });
+    }
+
+    const custId = await upsertCustomer({
+      phone,
+      name: name || 'Pelanggan',
+      email: email || '',
+      auth_method: auth_method || method || 'phone',
+      city: city || '',
+      id_card: id_card || ''
+    });
+
+    const customer = await dbGet('SELECT * FROM customers WHERE id = ?', [custId]);
+    res.json({ message: 'Profil penumpang berhasil disimpan', customer });
+  } catch (err) {
+    console.error('Error syncing customer profile:', err);
+    res.status(500).json({ error: 'Gagal memperbarui profil penumpang' });
+  }
+});
+
 app.put('/api/business/customers/:id', requireOperator, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, is_vip, is_blacklisted, notes } = req.body;
-    const updated = await updateCustomerRecord(id, { name, email, is_vip, is_blacklisted, notes });
+    const { name, email, city, id_card, is_vip, is_blacklisted, notes } = req.body;
+    const updated = await updateCustomerRecord(id, { name, email, city, id_card, is_vip, is_blacklisted, notes });
     if (!updated) {
       return res.status(404).json({ error: 'Pelanggan tidak ditemukan' });
     }

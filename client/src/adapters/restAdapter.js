@@ -58,3 +58,23 @@ export async function cancelBooking(bookingId, phone) {
   }
   return data;
 }
+
+// 6. Sync / Register passenger profile in CRM
+export async function syncCustomerProfile(userData) {
+  try {
+    const res = await fetch(`${API_BASE}/api/customers/profile`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      console.warn('REST customer profile sync warning:', err.error);
+      return null;
+    }
+    return res.json();
+  } catch (err) {
+    console.warn('Customer profile sync error:', err.message);
+    return null;
+  }
+}

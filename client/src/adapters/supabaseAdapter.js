@@ -260,3 +260,33 @@ export async function cancelBooking(bookingId, phone) {
 
   return updated;
 }
+
+// 6. Sync / Register passenger profile in CRM
+export async function syncCustomerProfile(userData) {
+  if (!supabase || !userData?.phone) return null;
+  const { phone, name, email, city, id_card, method, auth_method } = userData;
+  try {
+    const payload = {
+      phone,
+      name: name || 'Pelanggan',
+      email: email || '',
+      city: city || '',
+      id_card: id_card || '',
+      auth_method: auth_method || method || 'phone',
+      updated_at: new Date().toISOString()
+    };
+    const { data, error } = await supabase
+      .from('customers')
+      .upsert(payload, { onConflict: 'phone' })
+      .select()
+      .single();
+    if (error) {
+      console.warn('Supabase customer profile sync warning:', error.message);
+      return null;
+    }
+    return data;
+  } catch (err) {
+    console.warn('Customer profile sync error:', err.message);
+    return null;
+  }
+}

@@ -436,8 +436,10 @@ export async function getCustomers() {
     return {
       id: index + 1,
       phone,
-      name: first.customer_name || 'Pelanggan',
-      email: first.customer_email || '',
+      name: override.name || first.customer_name || 'Pelanggan',
+      email: override.email || first.customer_email || '',
+      city: override.city || first.customer_city || '',
+      id_card: override.id_card || first.customer_id_card || '',
       auth_method: first.auth_method || 'phone',
       is_vip: override.is_vip !== undefined ? Boolean(override.is_vip) : false,
       is_blacklisted: override.is_blacklisted !== undefined ? Boolean(override.is_blacklisted) : false,
@@ -502,12 +504,18 @@ export async function updateCustomer(id, customerData) {
 
   // 1. Try updating in Supabase cloud customers table
   try {
-    let query = supabase.from('customers').update({
+    const updatePayload = {
       is_vip: Boolean(customerData.is_vip),
       is_blacklisted: Boolean(customerData.is_blacklisted),
       notes: (customerData.notes || '').trim(),
       updated_at: new Date().toISOString()
-    });
+    };
+    if (customerData.name !== undefined) updatePayload.name = customerData.name.trim();
+    if (customerData.email !== undefined) updatePayload.email = customerData.email.trim();
+    if (customerData.city !== undefined) updatePayload.city = customerData.city.trim();
+    if (customerData.id_card !== undefined) updatePayload.id_card = customerData.id_card.trim();
+
+    let query = supabase.from('customers').update(updatePayload);
 
     if (id && typeof id === 'number' && id > 1000) {
       query = query.eq('id', id);
@@ -550,9 +558,14 @@ export async function updateCustomer(id, customerData) {
   if (phone) {
     const overrides = getLocalCustomerOverrides();
     overrides[phone] = {
+      ...(overrides[phone] || {}),
       is_vip: Boolean(customerData.is_vip),
       is_blacklisted: Boolean(customerData.is_blacklisted),
       notes: (customerData.notes || '').trim(),
+      ...(customerData.name !== undefined ? { name: customerData.name.trim() } : {}),
+      ...(customerData.email !== undefined ? { email: customerData.email.trim() } : {}),
+      ...(customerData.city !== undefined ? { city: customerData.city.trim() } : {}),
+      ...(customerData.id_card !== undefined ? { id_card: customerData.id_card.trim() } : {}),
       updated_at: new Date().toISOString()
     };
     setLocalCustomerOverrides(overrides);
@@ -564,9 +577,7 @@ export async function updateCustomer(id, customerData) {
       customer: {
         id,
         phone,
-        is_vip: Boolean(customerData.is_vip),
-        is_blacklisted: Boolean(customerData.is_blacklisted),
-        notes: (customerData.notes || '').trim()
+        ...overrides[phone]
       },
       notice: 'Perubahan berhasil disimpan di memori browser (Mode Fallback: tabel customers di Supabase belum dibuat).'
     };

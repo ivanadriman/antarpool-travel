@@ -307,3 +307,34 @@ test('8. Updating customer VIP status, blacklist flag, and notes persists correc
   assert.ok(Array.isArray(bookings));
 });
 
+test('9. Client profile registration and update endpoint persists city and id_card', async () => {
+  const profileRes = await fetch(`${BASE_URL}/api/customers/profile`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      phone: '081299887766',
+      name: 'Raden Budi',
+      email: 'budi.raden@example.com',
+      city: 'Surabaya',
+      id_card: '3578012345678901',
+      auth_method: 'phone'
+    })
+  });
+  assert.equal(profileRes.status, 200);
+  const data = await profileRes.json();
+  assert.equal(data.customer.phone, '081299887766');
+  assert.equal(data.customer.city, 'Surabaya');
+  assert.equal(data.customer.id_card, '3578012345678901');
+
+  // Verify business can see this customer in enriched list
+  const listRes = await fetch(`${BASE_URL}/api/business/customers`, {
+    headers: { Authorization: `Bearer ${operatorToken}` }
+  });
+  const list = await listRes.json();
+  const found = list.find((c) => c.phone === '081299887766');
+  assert.ok(found);
+  assert.equal(found.city, 'Surabaya');
+  assert.equal(found.id_card, '3578012345678901');
+});
+
+

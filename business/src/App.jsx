@@ -5,7 +5,7 @@ import {
   MapPin, Shield, RefreshCw, Car, ChevronRight, AlertCircle,
   Grid, Trash2, History, LogOut, Search, MessageCircle,
   Star, ShieldAlert, Phone, Mail, ExternalLink, FileText,
-  Database, Info, AlertTriangle
+  Database, Info, AlertTriangle, CreditCard
 } from 'lucide-react';
 import ScheduleModal from './components/ScheduleModal';
 import ArmadaModal from './components/ArmadaModal';
@@ -1431,7 +1431,7 @@ export default function App() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type="text"
-                  placeholder="Cari nama, WhatsApp/HP, atau email..."
+                  placeholder="Cari nama, WhatsApp, email, kota domisili, atau NIK..."
                   value={customerSearch}
                   onChange={(e) => setCustomerSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 rounded-xl bg-slate-50 border border-slate-300 focus:outline-hidden focus:border-blue-500 focus:bg-white text-xs text-slate-800 placeholder-slate-400"
@@ -1502,8 +1502,10 @@ export default function App() {
                   const matchName = (c.name || '').toLowerCase().includes(q);
                   const matchPhone = (c.phone || '').toLowerCase().includes(q);
                   const matchEmail = (c.email || '').toLowerCase().includes(q);
+                  const matchCity = (c.city || '').toLowerCase().includes(q);
+                  const matchIdCard = (c.id_card || '').toLowerCase().includes(q);
                   const matchNotes = (c.notes || '').toLowerCase().includes(q);
-                  if (!matchName && !matchPhone && !matchEmail && !matchNotes) return false;
+                  if (!matchName && !matchPhone && !matchEmail && !matchCity && !matchIdCard && !matchNotes) return false;
                 }
                 return true;
               });
@@ -1583,6 +1585,33 @@ export default function App() {
                                 </span>
                               )}
                             </div>
+                          </div>
+
+                          {/* Extra Profile Attributes (City, NIK, Email, Auth) */}
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2.5">
+                            {c.city && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-[10px] font-semibold border border-blue-200">
+                                <MapPin className="w-2.5 h-2.5" />
+                                {c.city}
+                              </span>
+                            )}
+                            {c.id_card && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-mono font-medium border border-slate-200" title={`NIK: ${c.id_card}`}>
+                                <CreditCard className="w-2.5 h-2.5 text-slate-500" />
+                                NIK: {c.id_card}
+                              </span>
+                            )}
+                            {c.email && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 text-[10px] truncate max-w-[170px] border border-slate-200" title={c.email}>
+                                <Mail className="w-2.5 h-2.5 text-slate-400" />
+                                <span className="truncate">{c.email}</span>
+                              </span>
+                            )}
+                            {c.auth_method && (
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500">
+                                via {c.auth_method === 'google' ? 'Google' : c.auth_method === 'email' ? 'Email' : 'WA'}
+                              </span>
+                            )}
                           </div>
 
                           {/* Quick Stats Grid */}

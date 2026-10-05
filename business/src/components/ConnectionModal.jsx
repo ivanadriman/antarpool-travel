@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS customers (
   phone TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL,
   email TEXT,
+  city TEXT DEFAULT '',
+  id_card TEXT DEFAULT '',
   auth_method TEXT DEFAULT 'phone',
   is_vip BOOLEAN DEFAULT FALSE,
   is_blacklisted BOOLEAN DEFAULT FALSE,
@@ -39,6 +41,10 @@ CREATE TABLE IF NOT EXISTS customers (
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migrasi kolom jika tabel customers sudah ada sebelumnya
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS city TEXT DEFAULT '';
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS id_card TEXT DEFAULT '';
 
 CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);
 

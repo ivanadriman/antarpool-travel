@@ -15,3 +15,4 @@ export const getSchedules = (...args) => adapter.getSchedules(...args);
 export const createBooking = (...args) => adapter.createBooking(...args);
 export const lookupBookings = (...args) => adapter.lookupBookings(...args);
 export const cancelBooking = (...args) => adapter.cancelBooking(...args);
+export const syncCustomerProfile = (...args) => adapter.syncCustomerProfile(...args);
